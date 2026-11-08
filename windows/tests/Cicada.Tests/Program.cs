@@ -2814,6 +2814,28 @@ static class Tests
         Equal(Correction.Verdict.Drop, Verdict("莫纳", "Morpho", 0.7), "莫纳");
     }
 
+    /// A learned "S平 → X平" never reaches into "iOS平台"; on its own it still applies.
+    public static void FixLearnedWordsStayWhole()
+    {
+        Check(Correction.WordIn("S平", "iOS平台很好") < 0, "inside iOS");
+        Check(Correction.WordIn("A工", "DATA工具") < 0, "inside DATA");
+        Check(Correction.WordIn("S平", "在S平台上") >= 0, "on its own");
+        Check(Correction.WordIn("S平", "iOS平台和S平台") >= 0, "the second one");
+        Check(Correction.WordIn("莫拉", "解释这个莫拉的") >= 0, "Chinese edges");
+        Equal("iOS平台和X平台", Correction.Apply([new("S平", "X平")], "iOS平台和S平台").Text, "applied to the whole one");
+    }
+
+    /// A translation isn't a misheard name: one 对 to "X平台 → X platform" taught 平台 → platform.
+    public static void FixTranslationsAreNotAsked()
+    {
+        Equal(Correction.Verdict.Drop, Verdict("X平台", "X platform", 0.9), "X平台");
+        Equal(Correction.Verdict.Drop, Verdict("平台", "platform", 0.95), "平台");
+        Equal(Correction.Verdict.Drop, Verdict("respons", "responsible", 0.85), "respons");
+        Equal(Correction.Verdict.Ask, Verdict("GPT四", "GPT4", 0.85), "GPT四");
+        Check(Correction.Translation("平台", "platform"), "a translation");
+        Check(!Correction.Translation("莫拉", "Morpho"), "a name");
+    }
+
     public static void FixConfirmedHeardFormIsApplied()
     {
         Equal(Correction.Verdict.Apply, Verdict("莫拉", "Morpho", 0.5, known: [("莫拉", "Morpho")]), "known");
@@ -2977,6 +2999,15 @@ static class Tests
             Equal("All 2 places heard as 木娜 in this meeting", Strings.LF("整场听成 %@ 的 %lld 处都改", "木娜", 2), "positional");
         }
         finally { Strings.Load(Path.Combine(AppContext.BaseDirectory, "Resources"), "zh-Hans"); }
+    }
+
+    public static void VocabAYesNeverTeachesATranslation()
+    {
+        var v = new Vocabulary(null);
+        v.Confirm("平台", "platform");
+        Equal(0, v.Terms.Count, "a yes in a meeting");
+        v.Confirm("平台", "platform", source: "user");
+        Check(v.Knows("平台", "platform"), "the user's own");
     }
 
     public static void VocabImportLinesWithHeardForms()
