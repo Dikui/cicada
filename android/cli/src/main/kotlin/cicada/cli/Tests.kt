@@ -63,6 +63,7 @@ object Tests {
             "ignoresClicks" to ::ignoresClicks,
             "wavRoundTrip" to ::wavRoundTrip,
             "parsesNotes" to ::parsesNotes,
+            "termsKeepOnlyFormsTheRecognizerWrote" to ::termsKeepOnlyFormsTheRecognizerWrote,
             "keepsEarliestTimes" to ::keepsEarliestTimes,
             "notesPromptIsTheMacs" to ::notesPromptIsTheMacs,
             "keepsFrozenTopicsAndTakesTheRepliesTail" to ::keepsFrozenTopicsAndTakesTheRepliesTail,
@@ -526,6 +527,14 @@ object Tests {
     }
 
     // MARK: Notes
+
+    /// A heard form only a fix wrote ("platform" for 平台) isn't one: it would teach the translator
+    /// and the next fix the same mistake.
+    fun termsKeepOnlyFormsTheRecognizerWrote() {
+        val l = TranscriptLine("a", 0.0, "them", "我们 twoty 平台", null, "zh-CN", "en", fixes = mutableListOf(LineFix("平台", "platform")))
+        val terms = listOf(NoteTerm("X平台", "n", mutableListOf("Xplatform", "platform", "Twoty")))
+        equal(listOf("Twoty"), NotesEngine.heardAsSaid(terms, listOf(l)).first().heard.toList(), "heard as said")
+    }
 
     fun parsesNotes() {
         val reply = """
