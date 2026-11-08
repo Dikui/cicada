@@ -3264,6 +3264,27 @@ static class Tests
         Equal("Emma,Kenji", string.Join(",", ShareProjection.Doc(s, ShareScope.Full, true).Lines.Select(l => l.Who).Distinct().Order()), "names");
     }
 
+    public static void ShareCopiesOneMessage()
+    {
+        var now = new DateTimeOffset(2026, 11, 8, 10, 0, 0, TimeSpan.Zero);
+        var r = new ShareRecord { Url = "https://cicada.indaloop.app/s/abc", Password = "k7m2p9", ExpiresAt = now.AddDays(7).AddSeconds(-3) };
+        Equal("「周会」会议记录\nhttps://cicada.indaloop.app/s/abc\n密码：k7m2p9（7 天内有效）", r.Message("周会", now), "Chinese, with a password");
+        var open = new ShareRecord { Url = r.Url, ExpiresAt = now.AddDays(365) };
+        Equal("「周会」会议记录\nhttps://cicada.indaloop.app/s/abc\n1 年内有效", open.Message("周会", now), "no password, a year");
+        Equal(7, new ShareRecord { ExpiresAt = now.AddDays(7).AddSeconds(2) }.DaysLeft(now), "a clock a little behind the server's still says 7");
+        Equal(7, new ShareRecord { ExpiresAt = now.AddDays(6.5) }.DaysLeft(now), "part of a day counts");
+        Equal(1, new ShareRecord { ExpiresAt = now.AddMinutes(10) }.DaysLeft(now), "never 0");
+        var res = Path.Combine(AppContext.BaseDirectory, "Resources");
+        try
+        {
+            Strings.Load(res, "en");
+            Equal("Meeting record: Weekly\nhttps://cicada.indaloop.app/s/abc\nPassword: k7m2p9 (valid for 7 days)", r.Message("Weekly", now), "English");
+            Strings.Load(res, "ja");
+            Equal("パスワード：k7m2p9（7 日間有効）", r.Message("x", now).Split('\n')[2], "Japanese");
+        }
+        finally { Strings.Load(res, "zh-Hans"); }
+    }
+
     public static void ShareRoundsAndLanguages()
     {
         var s = ShareSession();

@@ -19,7 +19,7 @@ sealed class ShareDialog : Window
     Step step = Step.Settings;
     ShareScope scope = ShareScope.Notes;
     int days = 7;
-    bool names, usePassword, summaryInPreview, dropNotes, confirmRevoke;
+    bool names, usePassword, summaryInPreview, dropNotes, confirmRevoke, showOptions;
     string password = SharePassword.Make();
     readonly HashSet<int> removed = [];
     List<ShareHit> hits = [];
@@ -78,36 +78,67 @@ sealed class ShareDialog : Window
         p.Children.Add(Gap(Ui.Text(L("内容"), 12, Palette.Secondary, FontWeights.SemiBold), 16));
         p.Children.Add(Gap(Radio(L("只分享纪要"), scope == ShareScope.Notes, HasNotes, () => scope = ShareScope.Notes), 6));
         p.Children.Add(Gap(Radio(L("纪要和双语全文"), scope == ShareScope.Full, true, () => scope = ShareScope.Full), 6));
-        p.Children.Add(Gap(Row(L("有效期"), Ui.Choice([("7", L("7 天")), ("30", L("30 天")), ("365", L("1 年"))], days.ToString(), v => days = int.Parse(v), width: 140)), 16));
-        p.Children.Add(Gap(Row(L("显示说话人名字"), Ui.Switch(names, v => names = v, L("显示说话人名字"))), 12));
-        p.Children.Add(Gap(Row(L("用密码保护"), Ui.Switch(usePassword, v => { usePassword = v; Render(); }, L("用密码保护"))), 12));
         Button? make = null;
-        if (usePassword)
+        if (showOptions)
         {
-            var box = new TextBox { Text = password, FontFamily = new FontFamily("Cascadia Mono, Consolas") };
-            System.Windows.Automation.AutomationProperties.SetName(box, L("用密码保护"));
-            box.TextChanged += (_, _) => { password = box.Text; if (make is not null) make.IsEnabled = password.Trim().Length >= 6; };
-            var again = Ui.Button(L("换一个"), () => { password = SharePassword.Make(); Render(); }, height: 34);
-            again.MinWidth = 0; again.Margin = new Thickness(8, 0, 0, 0);
-            var grid = new DockPanel();
-            DockPanel.SetDock(again, Dock.Right);
-            grid.Children.Add(again); grid.Children.Add(Ui.Field(box));
-            p.Children.Add(Gap(grid, 8));
+            p.Children.Add(Gap(Row(L("用密码保护"), Ui.Switch(usePassword, v => { usePassword = v; Render(); }, L("用密码保护"))), 16));
+            if (usePassword)
+            {
+                var box = new TextBox { Text = password, FontFamily = new FontFamily("Cascadia Mono, Consolas") };
+                System.Windows.Automation.AutomationProperties.SetName(box, L("用密码保护"));
+                box.TextChanged += (_, _) => { password = box.Text; if (make is not null) make.IsEnabled = password.Trim().Length >= 6; };
+                var again = Ui.Button(L("换一个"), () => { password = SharePassword.Make(); Render(); }, height: 34);
+                again.MinWidth = 0; again.Margin = new Thickness(8, 0, 0, 0);
+                var grid = new DockPanel();
+                DockPanel.SetDock(again, Dock.Right);
+                grid.Children.Add(again); grid.Children.Add(Ui.Field(box));
+                p.Children.Add(Gap(grid, 8));
+            }
+            p.Children.Add(Gap(Row(L("有效期"), Ui.Choice([("7", L("7 天")), ("30", L("30 天")), ("365", L("1 年"))], days.ToString(), v => days = int.Parse(v), width: 140)), 12));
+            p.Children.Add(Gap(Row(L("显示说话人名字"), Ui.Switch(names, v => names = v, L("显示说话人名字"))), 12));
+            if (!usePassword && HasNotes)
+                p.Children.Add(Gap(Row(L("预览卡显示摘要"), Ui.Switch(summaryInPreview, v => summaryInPreview = v, L("预览卡显示摘要"))), 12));
         }
-        else if (HasNotes)
-            p.Children.Add(Gap(Row(L("预览卡显示摘要"), Ui.Switch(summaryInPreview, v => summaryInPreview = v, L("预览卡显示摘要"))), 12));
-        p.Children.Add(Gap(Ui.Helper(usePassword ? L("建议把链接和密码分两条消息发送。") : L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。")), 16));
-        make = Ui.Button(L("生成链接"), Go, Ui.Kind.Primary);
+        else
+        {
+            // The choices already made, in one line; 更改 opens them in place.
+            var change = Ui.Button(L("更改"), () => { showOptions = true; Render(); }, height: 28);
+            change.MinWidth = 0; change.Padding = new Thickness(12, 0, 12, 0); change.Margin = new Thickness(8, 0, 0, 0);
+            var line = Ui.Text(Summary, 13, Palette.Secondary, wrap: false);
+            line.TextTrimming = TextTrimming.CharacterEllipsis; line.VerticalAlignment = VerticalAlignment.Center;
+            var d = new DockPanel();
+            DockPanel.SetDock(change, Dock.Right);
+            d.Children.Add(change); d.Children.Add(line);
+            p.Children.Add(Gap(d, 16));
+        }
+        if (!usePassword) p.Children.Add(Gap(Ui.Helper(L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。")), 16));
+        make = Ui.Button(L("生成并复制"), Go, Ui.Kind.Primary);
         make.IsDefault = true;
         make.IsEnabled = !usePassword || password.Trim().Length >= 6;
         p.Children.Add(Gap(Buttons(Ui.Button(L("取消"), Close), make), 24));
         return p;
     }
 
-    /// Takes the dialog's settings from the debug pipe: `sharesheet <id>[,full][,pw][,names][,30][,go]`.
+    string Summary => string.Join(" · ",
+        usePassword ? L("密码保护") : L("无密码"),
+        days == 365 ? L("1 年有效") : LF("%lld 天有效", days),
+        names ? L("显示名字") : L("不显示名字"));
+
+    /// Takes the dialog's settings from the debug pipe: `sharesheet <id>[,full][,pw][,names][,30][,more][,go]`
+    /// (more presses 更改); on the done step, `copy`, `copylink` and `copypw` press 复制 and its menu's items.
     public void Debug(IReadOnlyCollection<string> p)
     {
+        if (step == Step.Done && record is { } r)
+        {
+            if (p.Contains("menu")) { copyMenu?.Invoke(); return; }
+            if (p.Contains("copy")) Copy(MessageOf(r), "all");
+            else if (p.Contains("copylink")) Copy(r.Url, "link");
+            else if (p.Contains("copypw") && r.Password is { } pw) Copy(pw, "password");
+            Render();
+            return;
+        }
         if (step != Step.Settings) return;
+        if (p.Contains("more")) showOptions = true;
         if (p.Contains("full")) scope = ShareScope.Full;
         if (p.Contains("pw")) usePassword = true;
         if (p.Contains("names")) names = true;
@@ -135,7 +166,7 @@ sealed class ShareDialog : Window
         {
             case ShareOutcome.Shared s:
                 record = s.Record;
-                Copy(s.Record.Url, "link");
+                Copy(MessageOf(s.Record), "all");
                 views = 0;
                 step = Step.Done;
                 break;
@@ -244,9 +275,8 @@ sealed class ShareDialog : Window
     UIElement DoneView(ShareRecord r)
     {
         var p = new StackPanel();
-        p.Children.Add(Header(copied == "link" ? L("链接已复制") : L("已分享")));
-        p.Children.Add(Gap(Copyable(r.Url, "link", L("复制链接")), 16));
-        if (r.Password is { } pw) p.Children.Add(Gap(Copyable(pw, "password", L("复制密码")), 8));
+        p.Children.Add(Header(copied == "all" ? (r.Password is null ? L("链接已复制") : L("链接和密码已复制")) : L("已分享")));
+        p.Children.Add(Gap(Link(r), 16));
         p.Children.Add(Gap(Ui.Text(Status(r), 12, Palette.Secondary), 12));
         p.Children.Add(Gap(new Border { Height = 1, Background = Palette.Line }, 16));
         if (confirmRevoke)
@@ -281,27 +311,52 @@ sealed class ShareDialog : Window
         return p;
     }
 
-    FrameworkElement Copyable(string text, string what, string label)
+    /// The link and, under it, the password in one grey box; beside it one 复制 that copies both as
+    /// one message, its arrow either alone for whoever sends them apart (the Mac's Menu with a
+    /// primary action). Without a password it is a plain button.
+    FrameworkElement Link(ShareRecord r)
     {
-        var value = new TextBox
+        TextBox Value(string text, Brush color) => new()
         {
             Text = text, IsReadOnly = true, BorderThickness = new Thickness(0), Background = Brushes.Transparent, FontSize = 12,
-            FontFamily = new FontFamily("Cascadia Mono, Consolas"), Foreground = Palette.Ink, VerticalAlignment = VerticalAlignment.Center,
-            Padding = new Thickness(0), MinHeight = 0, VerticalContentAlignment = VerticalAlignment.Center,
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"), Foreground = color, Padding = new Thickness(0), MinHeight = 0,
         };
-        var box = new Border { Background = Palette.Subtle, CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 0, 8, 0), Child = value, Height = 32, VerticalAlignment = VerticalAlignment.Center };
-        var b = Ui.Button(copied == what ? L("已复制") : label, () => { Copy(text, what); Render(); }, height: 32);
-        b.MinWidth = 0; b.Margin = new Thickness(8, 0, 0, 0);
+        var lines = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        lines.Children.Add(Value(r.Url, Palette.Ink));
+        if (r.Password is { } pw) lines.Children.Add(Gap(Value(LF("密码：%@", pw), Palette.Secondary), 4));
+        var box = new Border { Background = Palette.Subtle, CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 7, 8, 7), Child = lines, MinHeight = 32 };
+        var label = copied is null ? L("复制") : L("已复制");
+        void All() { Copy(MessageOf(r), "all"); Render(); }
+        FrameworkElement copy;
+        if (r.Password is { } p)
+        {
+            (copy, copyMenu) = Ui.SplitButton(label, All, [
+                (L("只复制链接"), () => { Copy(r.Url, "link"); Render(); }),
+                (L("只复制密码"), () => { Copy(p, "password"); Render(); }),
+            ]);
+        }
+        else
+        {
+            var b = Ui.Button(label, All, height: 32);
+            b.MinWidth = 0;
+            copy = b;
+            copyMenu = null;
+        }
+        copy.Margin = new Thickness(8, 0, 0, 0);
+        copy.VerticalAlignment = VerticalAlignment.Center;
         var d = new DockPanel();
-        DockPanel.SetDock(b, Dock.Right);
-        d.Children.Add(b); d.Children.Add(box);
+        DockPanel.SetDock(copy, Dock.Right);
+        d.Children.Add(copy); d.Children.Add(box);
         return d;
     }
 
+    Action? copyMenu;
+
+    string MessageOf(ShareRecord r) => r.Message(SessionStore.DisplayTitle(session), DateTimeOffset.Now);
+
     string Status(ShareRecord r)
     {
-        var left = Math.Max(1, (int)Math.Ceiling((r.ExpiresAt - DateTimeOffset.Now).TotalDays));
-        var expiry = LF("%lld 天后失效", left);
+        var expiry = LF("%lld 天后失效", r.DaysLeft(DateTimeOffset.Now));
         return views is { } v ? expiry + " · " + LF("打开 %lld 次", v) : expiry;
     }
 

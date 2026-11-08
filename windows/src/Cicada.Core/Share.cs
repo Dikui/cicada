@@ -195,6 +195,21 @@ public sealed class ShareRecord
     [JsonPropertyName("scope")] public string Scope { get; set; } = "notes";
     [JsonPropertyName("token")] public string Token { get; set; } = "";
     [JsonPropertyName("url")] public string Url { get; set; } = "";
+
+    /// What 生成并复制 and 复制 put on the clipboard, in the UI's language (the Mac's
+    /// ShareSheet.clipboardText): the title, the link on a line of its own (chat apps then make it
+    /// a link), the password and how long it stays open.
+    public string Message(string title, DateTimeOffset now)
+    {
+        var left = DaysLeft(now);
+        var valid = left >= 365 ? Strings.L("1 年内有效") : Strings.LF("%lld 天内有效", left);
+        var last = Password is { } pw ? Strings.LF("密码：%@（%@）", pw, valid) : valid;
+        return string.Join("\n", Strings.LF("「%@」会议记录", title), Url, last);
+    }
+
+    /// Whole days until the link closes, at least 1. The server sets the expiry from its own clock,
+    /// so a computer a second behind it would round a fresh 7-day link up to 8: an hour's slack.
+    public int DaysLeft(DateTimeOffset now) => Math.Max(1, (int)Math.Ceiling((ExpiresAt - now - TimeSpan.FromHours(1)).TotalDays));
 }
 
 /// Where the review found a problem: the notes, or lines `from`…`to` of what was sent.

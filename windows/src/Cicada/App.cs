@@ -1430,13 +1430,16 @@ static class DebugServer
                 _ = Task.Run(async () => Log.Debug($"share: revoked {await app.Sharing.Revoke(r, arg)}"));
                 break;
             }
-            // sharesheet <record id>[,full][,pw][,names][,30|365][,go] opens 分享… (go presses 生成链接);
-            // sharesheet leaveout presses 去掉这些内容后分享; sharesheet alone closes it.
+            // sharesheet <record id>[,full][,pw][,names][,30|365][,more][,go] opens 分享… (more presses 更改,
+            // go 生成并复制); sharesheet leaveout presses 去掉这些内容后分享; on the done step
+            // sharesheet copy|copylink|copypw|menu presses 复制, its menu's items, or opens the menu;
+            // sharesheet alone closes it.
             case "sharesheet" or "shareSheet":
             {
                 var p = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
                 if (p.Length == 0) { ShareDialog.Current?.Close(); break; }
                 if (p[0] == "leaveout") { ShareDialog.Current?.DebugLeaveOut(); break; }
+                if (p[0] is "copy" or "copylink" or "copypw" or "menu") { ShareDialog.Current?.Debug(p); break; }
                 if (app.Store.Get(p[0]) is not { } s) return new JsonObject { ["error"] = "no such record" };
                 app.ShowRecords(p[0]);
                 app.Dispatcher().BeginInvoke(() => app.ShareSheet(s).Debug(p));

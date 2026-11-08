@@ -187,6 +187,44 @@ static class Ui
         return b;
     }
 
+    /// A split button, as Windows' own: the label does the usual thing, the chevron beside it opens
+    /// a menu of the alternatives. One soft-grey button with a hairline between the halves; `Open`
+    /// is the chevron's click, for the debug pipe.
+    public static (FrameworkElement Button, Action Open) SplitButton(string label, Action onClick, IReadOnlyList<(string label, Action act)> items, double height = 32)
+    {
+        Button Half(UIElement content, Thickness padding)
+        {
+            var b = new Button { Content = content, Background = Palette.Mica, Foreground = Palette.Ink, BorderThickness = new Thickness(0), Height = height, Padding = padding, Cursor = Cursors.Hand };
+            b.Template = Template(plain: true, radius: 0, soft: true);
+            return b;
+        }
+        var main = Half(Text(label, 14, Palette.Ink, wrap: false), new Thickness(14, 0, 12, 0));
+        main.Click += (_, _) => onClick();
+        AutomationName(main, label);
+        var arrow = Half(Icon(Icons.Chevron, 14, Palette.Secondary, stroke: 1.8), new Thickness(7, 0, 7, 0));
+        AutomationName(arrow, string.Join(" / ", items.Select(i => i.label)));
+        var line = new Border { Width = 1, Background = Palette.Line, Margin = new Thickness(0, 7, 0, 7) };
+        var g = new Grid { Background = Palette.Mica, VerticalAlignment = VerticalAlignment.Center };
+        for (int i = 0; i < 3; i++) g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(line, 1); Grid.SetColumn(arrow, 2);
+        g.Children.Add(main); g.Children.Add(line); g.Children.Add(arrow);
+        // The halves are square; the whole is clipped to the usual 10-point corners.
+        g.SizeChanged += (_, e) => g.Clip = new RectangleGeometry(new Rect(e.NewSize), 10, 10);
+        void Open()
+        {
+            var menu = new ContextMenu { PlacementTarget = g, Placement = PlacementMode.Bottom, FontFamily = Palette.Font };
+            foreach (var (text, act) in items)
+            {
+                var item = new MenuItem { Header = text };
+                item.Click += (_, _) => act();
+                menu.Items.Add(item);
+            }
+            menu.IsOpen = true;
+        }
+        arrow.Click += (_, _) => Open();
+        return (g, Open);
+    }
+
     /// A square icon-only button with a tooltip and an accessible name.
     public static Button IconButton(string icon, string name, Action onClick, Brush? color = null, double size = 40, double iconSize = 16, bool fill = false, bool onDark = false)
     {
