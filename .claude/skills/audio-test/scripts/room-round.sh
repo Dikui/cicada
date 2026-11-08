@@ -19,7 +19,7 @@ ctl=$repo/tools/lsctl
 mkdir -p $WORK
 [[ -x $WORK/audio ]] || swiftc -O $here/audio.swift -o $WORK/audio
 [[ -f $WORK/table.wav ]] || python3 $here/clips.py $WORK >/dev/null
-[[ -x $ctl ]] || swiftc -O $repo/tools/lsctl.swift -o $ctl
+[[ $ctl -nt $repo/tools/lsctl.swift ]] || swiftc -O $repo/tools/lsctl.swift -o $ctl
 
 $WORK/audio out "$OUT" >/dev/null
 osascript -e "set volume output volume $vol"

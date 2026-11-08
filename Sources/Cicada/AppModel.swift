@@ -30,7 +30,7 @@ final class AppModel: ObservableObject {
     var roomEchoGate = true
     /// The Mac's lines of late (wall clock), and room lines waiting to be told apart from their echo.
     private var recentOnline: [EchoMatch.Heard] = []
-    private var heldRoom: [(id: Int, seg: Segment, duration: Double, heard: EchoMatch.Heard)] = []
+    private(set) var heldRoom: [(id: Int, seg: Segment, duration: Double, heard: EchoMatch.Heard)] = []
     /// What each engine shows as the line in progress, and when it last changed.
     private var liveMain = (src: "", dst: "", at: Date.distantPast)
     private var liveRoom = (src: "", dst: "", at: Date.distantPast)
@@ -1692,17 +1692,25 @@ final class AppModel: ObservableObject {
             forName: Notification.Name(DevBuild.debugChannel), object: nil, queue: .main
         ) { [weak self] note in
             let cmd = note.object as? String ?? ""
-            MainActor.assumeIsolated { self?.debugCommand(cmd) }
+            let id = note.userInfo?["id"] as? String
+            MainActor.assumeIsolated { self?.runDebugCommand(cmd, id: id) }
         }
         debugLog("debug control ready")
         MainThreadWatchdog.shared.start()
     }
 
-    private func debugCommand(_ cmd: String) {
+    func debugCommand(_ cmd: String) {
         debugLog("debug command: \(cmd)")
         let parts = cmd.split(separator: ":", maxSplits: 1).map(String.init)
         let arg = parts.count > 1 ? parts[1] : ""
         switch parts.first ?? "" {
+        case "ping":
+            let snapshot = debugSnapshot(["build"])
+            DebugRun.reply?.data = snapshot
+        case "state":
+            // Built first: a bad section fails the reply while the snapshot is made.
+            let snapshot = debugSnapshot(arg.split(separator: ",").map(String.init))
+            DebugRun.reply?.data = snapshot
         // start:user is a click on 开始听; plain start is listening starting by itself.
         case "start": start(byUser: arg == "user")
         case "models":
@@ -1724,7 +1732,7 @@ final class AppModel: ObservableObject {
             // share:<record id>[,full][,pw] shares a meeting as the sheet would (point a dev build at a
             // local Worker with the shareServer default); unshare:<record id> turns it off.
             let p = arg.split(separator: ",").map(String.init)
-            guard let s = p.first.flatMap({ store.session($0) }) else { debugLog("share: no such record"); break }
+            guard let s = p.first.flatMap({ store.session($0) }) else { debugFail("share: no such record"); break }
             var o = ShareClient.Options()
             o.scope = p.contains("full") || s.notes?.isEmpty ?? true ? .full : .notes
             o.password = p.contains("pw") ? SharePassword.make() : nil
@@ -1741,7 +1749,7 @@ final class AppModel: ObservableObject {
                 NotificationCenter.default.post(name: .debugShareSheet, object: arg.isEmpty ? nil : arg)
             }
         case "unshare":
-            guard let r = ShareStore.read(arg) else { debugLog("share: \(arg) not shared"); break }
+            guard let r = ShareStore.read(arg) else { debugFail("share: \(arg) not shared"); break }
             Task { debugLog("share: revoked \(await ShareClient.shared.revoke(r, sessionID: arg))") }
         case "recordState": debugLog("record track: \(Recognition.recordTrack ? "on" : "off") settling=\(settling.count) tracked=\(refining.count)")
         case "recognizer":
@@ -2251,7 +2259,7 @@ final class AppModel: ObservableObject {
                 let ok = writeExport(s, kind: kind, to: dir.appendingPathComponent("export.\(ext)"))
                 debugLog("export \(ext) ok=\(ok)")
             }
-        default: break
+        default: debugFail("unknown debug command: \(parts.first ?? "")", code: "unknown_command")
         }
     }
 }

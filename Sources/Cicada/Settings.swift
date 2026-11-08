@@ -354,6 +354,7 @@ final class AppSettings: ObservableObject {
 }
 
 func debugLog(_ message: String) {
+    if Thread.isMainThread, debugLogCapture != nil { debugLogCapture?.append(message) }
     let line = "\(Date()) \(message)\n"
     let path = DevBuild.logPath
     if let handle = FileHandle(forWritingAtPath: path) {

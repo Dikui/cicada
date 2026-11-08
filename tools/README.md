@@ -6,6 +6,9 @@
 编译：`swiftc -O lsctl.swift -o lsctl`（其他几个文件同理）。
 
 - `lsctl <命令>`：通过分布式通知 `com.wquguru.cicada.debug` 遥控 App。
+  - 回复：每条命令带一个 id，App 在 `com.wquguru.cicada.debug.reply` 上回 JSON（`id`、`ok`、`error.code`、`data`、`log`），lsctl 等到它才退出。退出码：0 成功，1 命令失败，2 没有回复（App 没开、没开调试模式或是旧版），3 没有这个命令，64 用法错。标准输出只有 `data`（`lsctl state | jq` 可用），命令执行时写的日志行和错误在标准错误；`--json` 打印整个回复，`--timeout <秒>` 改等待时间（默认 3），`--no-reply` 像以前一样发完就走。命令里用 `Task` 晚些才写的日志不在回复里，仍看日志文件
+  - 状态：`state[:<分区>,…]` 把当前状态以 JSON 输出（`schema`、`at`，分区 `build` `permissions` `listen` `room` `display` `notes` `speak` `ai` `import` `update` `records` `problem`），直接从各引擎读；没有 key 和 token，原文只在调试模式下给。`ping` 只回 `build`
+  - 等待：`lsctl --wait '<路径> <==|!=|>|<|>=|<=> <值>'` 反复取 `state` 直到成立（默认最多 10 秒，超时退出 2 并写出当时的值），如 `lsctl start:user && lsctl --wait 'display.notesWindow.visible == true'`。布尔值只能用 `==` / `!=` 比 `true` / `false`
   - 开关字幕：`start` / `stop`（`start:user` 当作用户点了开始听，纪要窗口立即出现；`start` 当作自动开始，等到有人说话）
   - 麦克风：`mic:<on|off>` 等于点“打开麦克风”/“关闭麦克风”（没在听时打开会开始听；旧的 `listenSource:<system|room|both>` 也还能用），`hybridState` 把两边的状态写进日志，含 `echo=` 和测量值（扬声器传到麦克风没有）、`music=`、`micSilent=`；`roomEcho:on` / `roomGate:off` 下一场会议用系统回声消除 / 不在电脑放人声时关麦克风，单独试每道防线，日志 `hybrid: room line dropped as an echo` / `kept`、`room echo: speakers reach the mic` / `none`；`roomEchoSim:<on|off|real>` 假装测出（或没测出）回声；`roomMicSilent:<on|off>` 让麦克风从下次打开起只给 0（日志 `room mic: silent since it started`，再 `still silent`，纪要窗口出“麦克风没声音”）；`voiceMicRun:<on|off>` 只开回声消除单元看它对别的声音有没有影响；念译文时 `room mic muted` / `open`；`micDeniedSim:<on|off>` 让麦克风当作被拒（纪要窗口顶部提示、字幕条橙色标签、菜单栏橙点，纪要窗口收起 10 秒后发一次通知，日志 `problem:` 和 `menu bar: badge=`）。实测回声、桌边的话和同声传译：`.claude/skills/audio-test`
   - 打开界面：`open`（主窗口）、`panel`（菜单栏面板）、`settings[:speak]`（设置，可指定栏目）
