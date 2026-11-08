@@ -23,6 +23,7 @@ struct ShareSheet: View {
     @State private var views: Int?
     @State private var confirmRevoke = false
     @State private var copied: String?
+    @State private var showOptions = false
 
     private var hasNotes: Bool { !(session.notes?.isEmpty ?? true) }
 
@@ -57,6 +58,36 @@ struct ShareSheet: View {
                 }
                 .pickerStyle(.radioGroup).labelsHidden()
             }
+            if showOptions { options } else {
+                // The choices already made, in one line; 更改 opens them.
+                HStack(spacing: 8) {
+                    Text(summary).font(.system(size: 13)).foregroundStyle(Palette.secondary).lineLimit(1)
+                    Spacer()
+                    Button("更改") { showOptions = true }.controlSize(.small)
+                }
+            }
+            if !usePassword {
+                Text("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。")
+                    .font(.system(size: 12)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("取消", action: onClose).keyboardShortcut(.cancelAction)
+                Button("生成并复制") { go() }.keyboardShortcut(.defaultAction)
+                    .disabled(usePassword && password.count < 6)
+            }
+        }
+    }
+
+    private var options: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            row(L("用密码保护")) { Toggle("", isOn: $usePassword).toggleStyle(.switch).controlSize(.small).labelsHidden() }
+            if usePassword {
+                HStack(spacing: 8) {
+                    TextField("", text: $password).textFieldStyle(.roundedBorder).font(.system(size: 13, design: .monospaced))
+                    Button("换一个") { password = SharePassword.make() }.controlSize(.small)
+                }
+            }
             row(L("有效期")) {
                 Picker("", selection: $days) {
                     Text("7 天").tag(7)
@@ -66,24 +97,16 @@ struct ShareSheet: View {
                 .labelsHidden().fixedSize()
             }
             row(L("显示说话人名字")) { Toggle("", isOn: $names).toggleStyle(.switch).controlSize(.small).labelsHidden() }
-            row(L("用密码保护")) { Toggle("", isOn: $usePassword).toggleStyle(.switch).controlSize(.small).labelsHidden() }
-            if usePassword {
-                HStack(spacing: 8) {
-                    TextField("", text: $password).textFieldStyle(.roundedBorder).font(.system(size: 13, design: .monospaced))
-                    Button("换一个") { password = SharePassword.make() }.controlSize(.small)
-                }
-            } else if hasNotes {
+            if !usePassword, hasNotes {
                 row(L("预览卡显示摘要")) { Toggle("", isOn: $summaryInPreview).toggleStyle(.switch).controlSize(.small).labelsHidden() }
             }
-            Text(usePassword ? L("建议把链接和密码分两条消息发送。") : L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。"))
-                .font(.system(size: 12)).foregroundStyle(Palette.tertiary).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button("取消", action: onClose).keyboardShortcut(.cancelAction)
-                Button("生成链接") { go() }.keyboardShortcut(.defaultAction)
-                    .disabled(usePassword && password.count < 6)
-            }
         }
+    }
+
+    private var summary: String {
+        [usePassword ? L("密码保护") : L("无密码"),
+         days == 365 ? L("1 年有效") : L("\(days) 天有效"),
+         names ? L("显示名字") : L("不显示名字")].joined(separator: " · ")
     }
 
     private func go() {
@@ -99,7 +122,7 @@ struct ShareSheet: View {
         Task {
             switch await ShareClient.shared.share(session, o) {
             case .shared(let r):
-                copy(r.url, as: "link")
+                copy(Self.clipboardText(r, title: session.displayTitle), as: "all")
                 step = .done(r)
                 views = 0
             case .blocked(let hits, let kept): step = .blocked(hits, kept: kept)
@@ -201,23 +224,18 @@ struct ShareSheet: View {
 
     private func done(_ r: ShareRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            header(copied == "link" ? L("链接已复制") : L("已分享"), session.displayTitle)
+            header(copied == "all" ? (r.password == nil ? L("链接已复制") : L("链接和密码已复制")) : L("已分享"),
+                   session.displayTitle)
             HStack(spacing: 8) {
-                Text(r.url).font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 8).padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Palette.fill))
-                Button(copied == "link" ? L("已复制") : L("复制链接")) { copy(r.url, as: "link") }
-            }
-            if let pw = r.password {
-                HStack(spacing: 8) {
-                    Text(pw).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
-                        .padding(.horizontal, 8).padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Palette.fill))
-                    Button(copied == "password" ? L("已复制") : L("复制密码")) { copy(pw, as: "password") }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(r.url).lineLimit(1).truncationMode(.middle)
+                    if let pw = r.password { Text(L("密码：\(pw)")).foregroundStyle(Palette.secondary) }
                 }
+                .font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                .padding(.horizontal, 8).padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Palette.fill))
+                copyButton(r).fixedSize()
             }
             Text(status(r)).font(.system(size: 12)).foregroundStyle(Palette.secondary)
             Divider()
@@ -245,6 +263,29 @@ struct ShareSheet: View {
                 }
             }
         }
+    }
+
+    /// 复制 puts the link and the password on the clipboard as one message; its arrow copies either alone,
+    /// for whoever sends them apart.
+    @ViewBuilder private func copyButton(_ r: ShareRecord) -> some View {
+        let title = copied == nil ? L("复制") : L("已复制")
+        if let pw = r.password {
+            Menu(title) {
+                Button("只复制链接") { copy(r.url, as: "link") }
+                Button("只复制密码") { copy(pw, as: "password") }
+            } primaryAction: { copy(Self.clipboardText(r, title: session.displayTitle), as: "all") }
+        } else {
+            Button(title) { copy(Self.clipboardText(r, title: session.displayTitle), as: "all") }
+        }
+    }
+
+    /// What 复制链接和密码 puts on the clipboard, in the UI's language: the title, the link on a line
+    /// of its own (chat apps then make it a link), the password and how long it stays open.
+    static func clipboardText(_ r: ShareRecord, title: String) -> String {
+        let left = max(1, Int(ceil(r.expiresAt.timeIntervalSinceNow / 86400)))
+        let valid = left >= 365 ? L("1 年内有效") : L("\(left) 天内有效")
+        let last = r.password.map { L("密码：\($0)（\(valid)）") } ?? valid
+        return [L("「\(title)」会议记录"), r.url, last].joined(separator: "\n")
     }
 
     private func status(_ r: ShareRecord) -> String {
