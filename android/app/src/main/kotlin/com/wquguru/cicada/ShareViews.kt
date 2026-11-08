@@ -54,6 +54,7 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
     private var views: Int? = null
     private var confirmRevoke = false
     private var copied: String? = null
+    private var showOptions = false
     private val box = ui.stack(0).apply { setPadding(ui.dp(8), 0, ui.dp(8), 0) }
     private lateinit var dialog: android.app.Dialog
 
@@ -120,13 +121,37 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
                 else { alpha = 0.4f; isEnabled = false }
             }, ui.lp(top = 4))
         }
-        box.addView(label(L("有效期")), ui.lp(top = 16))
-        box.addView(ui.segmented(listOf("7" to L("7 天"), "30" to L("30 天"), "365" to L("1 年")), days.toString()) { days = it.toInt(); render() }, ui.lp(top = 8))
+        lateinit var go: View
+        if (!showOptions) {
+            // The choices already made, in one line; 更改 opens them.
+            box.addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(ui.dp(12), 0, 0, 0)
+                addView(ui.text(summary(), 14f, Palette.secondary, lines = 1).apply { ellipsize = android.text.TextUtils.TruncateAt.END }, ui.weight())
+                addView(ui.textButton(L("更改")) { showOptions = true; render() })
+            }, ui.lp(top = 10))
+        } else {
+            options { go }
+        }
+        if (!usePassword) box.addView(ui.text(L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。"), 13f, Palette.tertiary), ui.lp(top = 10))
+        go = ui.button(L("生成并复制"), "primary") { if (!usePassword || password.length >= 6) go() }
+        if (usePassword && password.length < 6) { go.alpha = 0.4f; go.isEnabled = false }
+        box.addView(buttons(ui.button(L("取消"), "quiet") { dialog.dismiss() }, go), ui.lp(top = 18))
+    }
+
+    private fun summary() = listOf(
+        if (usePassword) L("密码保护") else L("无密码"),
+        if (days == 365) L("1 年有效") else LF("%lld 天有效", days),
+        if (names) L("显示名字") else L("不显示名字"),
+    ).joinToString(" · ")
+
+    /// Password, expiry, names and the preview, opened by 更改 (in the Mac's order). `go` is the
+    /// primary button, made after these rows: the password field turns it off under six characters.
+    private fun options(go: () -> View) {
         val toggles = ui.stack(0).apply { setPadding(0, ui.dp(8), 0, 0) }
-        toggles.addView(ui.switchRow(L("显示说话人名字"), null, names, titleLines = 2) { names = it }.apply { setPadding(ui.dp(4), paddingTop, ui.dp(4), paddingBottom) })
         toggles.addView(ui.switchRow(L("用密码保护"), null, usePassword, titleLines = 2) { usePassword = it; render() }.apply { setPadding(ui.dp(4), paddingTop, ui.dp(4), paddingBottom) })
         box.addView(toggles)
-        lateinit var go: View
         if (usePassword) {
             val field = EditText(activity).apply {
                 setText(password)
@@ -141,8 +166,8 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
                     override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                     override fun afterTextChanged(s: Editable?) {
                         password = s.toString()
-                        go.alpha = if (password.length < 6) 0.4f else 1f
-                        go.isEnabled = password.length >= 6
+                        go().alpha = if (password.length < 6) 0.4f else 1f
+                        go().isEnabled = password.length >= 6
                     }
                 })
             }
@@ -152,13 +177,14 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
                 addView(field, ui.weight())
                 addView(ui.textButton(L("换一个")) { password = SharePassword.make(); field.setText(password) })
             }, ui.lp(top = 4))
-        } else if (hasNotes) {
-            box.addView(ui.switchRow(L("预览卡显示摘要"), null, summaryInPreview, titleLines = 2) { summaryInPreview = it }.apply { setPadding(ui.dp(4), paddingTop, ui.dp(4), paddingBottom) })
         }
-        box.addView(ui.text(if (usePassword) L("建议把链接和密码分两条消息发送。") else L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。"), 13f, Palette.tertiary), ui.lp(top = 10))
-        go = ui.button(L("生成链接"), "primary") { if (!usePassword || password.length >= 6) go() }
-        if (usePassword && password.length < 6) { go.alpha = 0.4f; go.isEnabled = false }
-        box.addView(buttons(ui.button(L("取消"), "quiet") { dialog.dismiss() }, go), ui.lp(top = 18))
+        box.addView(label(L("有效期")), ui.lp(top = 16))
+        box.addView(ui.segmented(listOf("7" to L("7 天"), "30" to L("30 天"), "365" to L("1 年")), days.toString()) { days = it.toInt(); render() }, ui.lp(top = 8))
+        val more = ui.stack(0).apply { setPadding(0, ui.dp(8), 0, 0) }
+        more.addView(ui.switchRow(L("显示说话人名字"), null, names, titleLines = 2) { names = it }.apply { setPadding(ui.dp(4), paddingTop, ui.dp(4), paddingBottom) })
+        if (!usePassword && hasNotes)
+            more.addView(ui.switchRow(L("预览卡显示摘要"), null, summaryInPreview, titleLines = 2) { summaryInPreview = it }.apply { setPadding(ui.dp(4), paddingTop, ui.dp(4), paddingBottom) })
+        box.addView(more)
     }
 
     private fun options() = ShareClient.Options(
@@ -172,7 +198,7 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
             val out = app.share.share(session, o)
             app.main.post {
                 when (out) {
-                    is ShareClient.Outcome.Shared -> { copy(out.record.url, "link"); views = 0; set(Step.Done(out.record)) }
+                    is ShareClient.Outcome.Shared -> { copy(clipboardText(out.record), "all"); views = 0; set(Step.Done(out.record)) }
                     is ShareClient.Outcome.Blocked -> set(Step.Blocked(out.hits, out.kept))
                     is ShareClient.Outcome.Failed -> set(Step.Failed(message(out.code)))
                 }
@@ -245,23 +271,20 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
     // MARK: Done
 
     private fun done(r: ShareRecord) {
-        header(if (copied == "link") L("链接已复制") else L("已分享"))
-        box.addView(field(r.url), ui.lp(top = 16))
+        header(if (copied == "all") (if (r.password == null) L("链接已复制") else L("链接和密码已复制")) else L("已分享"))
+        // One grey box: the link, and the password under it.
+        box.addView(ui.stack(4, field(r.url)).apply {
+            r.password?.let { addView(field(LF("密码：%@", it), Palette.secondary)) }
+            background = ui.rounded(Palette.ground, 12)
+            setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
+        }, ui.lp(top = 16))
         box.addView(buttons(
-            ui.button(if (copied == "link") L("已复制") else L("复制链接"), "quiet", height = 48) { copy(r.url, "link"); render() },
+            copyButton(r),
             ui.button(L("分享"), "primary", height = 48) {
-                // The link alone: the password goes in a message of its own.
+                // The same message 复制 copies: title, link, password and how long it stays open.
                 activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
-                    .putExtra(Intent.EXTRA_SUBJECT, SessionStore.displayTitle(session)).putExtra(Intent.EXTRA_TEXT, r.url), L("分享")))
+                    .putExtra(Intent.EXTRA_SUBJECT, SessionStore.displayTitle(session)).putExtra(Intent.EXTRA_TEXT, clipboardText(r)), L("分享")))
             }), ui.lp(top = 10))
-        r.password?.let { pw ->
-            box.addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(field(pw), ui.weight())
-                addView(ui.textButton(if (copied == "password") L("已复制") else L("复制密码")) { copy(pw, "password"); render() })
-            }, ui.lp(top = 12))
-        }
         box.addView(ui.text(status(r), 13f, Palette.secondary), ui.lp(top = 12))
         box.addView(View(activity).apply { setBackgroundColor(Palette.divider) }, LinearLayout.LayoutParams(-1, 1).apply { topMargin = ui.dp(14) })
         if (confirmRevoke) {
@@ -288,18 +311,48 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
     }
 
     // One line, the middle left out when long (selectable text would wrap instead); 复制 copies it whole.
-    private fun field(text: String) = ui.text(text, 14f, Palette.ink).apply {
+    private fun field(text: String, color: Int = Palette.ink) = ui.text(text, 14f, color).apply {
         typeface = Typeface.MONOSPACE
         isSingleLine = true
         ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
-        background = ui.rounded(Palette.ground, 12)
-        setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10))
+    }
+
+    private fun clipboardText(r: ShareRecord) = r.message(SessionStore.displayTitle(session))
+
+    /// 复制 copies the whole message. With a password its arrow (or a long press) offers the link or
+    /// the password alone, for whoever sends them apart (the Mac's Menu with a primary action).
+    private fun copyButton(r: ShareRecord): View {
+        val all = { copy(clipboardText(r), "all"); render() }
+        val pw = r.password
+        val title = if (copied == null) L("复制") else L("已复制")
+        if (pw == null) return ui.button(title, "quiet", height = 48) { all() }
+        lateinit var pill: LinearLayout
+        fun alone(anchor: View) = android.widget.PopupMenu(activity, anchor).apply {
+            menu.add(L("只复制链接")).setOnMenuItemClickListener { copy(r.url, "link"); render(); true }
+            menu.add(L("只复制密码")).setOnMenuItemClickListener { copy(pw, "password"); render(); true }
+            show()
+        }
+        pill = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = ui.dp(48)
+            background = ui.rounded(Palette.ground, 24)
+            addView(ui.text(title, 15f, Palette.ink, bold = true, lines = 1).apply {
+                gravity = Gravity.CENTER
+                minHeight = ui.dp(48)
+                contentDescription = title
+                ui.tappable(this, 24, onClick = all)
+                setOnLongClickListener { alone(pill); true }
+            }, ui.weight())
+            addView(View(activity).apply { setBackgroundColor(Palette.divider) }, LinearLayout.LayoutParams(1, ui.dp(20)))
+            addView(ui.iconButton(R.drawable.i_chevron_down, L("只复制链接") + "、" + L("只复制密码"), size = 18) { alone(pill) },
+                    LinearLayout.LayoutParams(ui.dp(44), ui.dp(48)))
+        }
+        return pill
     }
 
     private fun status(r: ShareRecord): String {
-        // Ten minutes of slack: the server's clock, not the phone's, set the expiry.
-        val left = maxOf(1L, Math.ceil((r.expiresAt.epochSecond - Instant.now().epochSecond - 600) / 86400.0).toLong())
-        val expiry = LF("%lld 天后失效", left)
+        val expiry = LF("%lld 天后失效", r.daysLeft())
         return views?.let { expiry + " · " + LF("打开 %lld 次", it) } ?: expiry
     }
 
@@ -321,7 +374,7 @@ class ShareSheet(private val activity: Activity, private val ui: Ui, private val
 
     private fun copy(text: String, what: String) {
         activity.getSystemService(android.content.ClipboardManager::class.java)
-            .setPrimaryClip(android.content.ClipData.newPlainText(if (what == "link") "link" else "password", text))
+            .setPrimaryClip(android.content.ClipData.newPlainText(what, text))
         copied = what
     }
 

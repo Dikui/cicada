@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 ///   改正听错的词: fixes on|off · asknames on|off · silent (a meeting with no audio) · heard <text> · vocab add|remove|state
 ///   fixstate · fixanswer yes|no · fixrevert <line> · fixlater · fixundo · fixedit <line>=<text>[|one][|keep0] · pinyin <text>
 ///   分享…: share <id>[,full][,pw] · unshare <id> · shares · shareSheet <id> (no id: closes it) · delete <id>
+///   shareserver [url] (a local Worker; none: cicada.indaloop.app) · clipboard
 class DebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!BuildConfig.DEBUG) return
@@ -191,6 +192,16 @@ class DebugReceiver : BroadcastReceiver() {
                 app.background.execute { Log.d("debug: share revoked ${app.share.revoke(r, arg)}") }
                 return mapOf("unsharing" to arg)
             }
+            // `shareserver http://127.0.0.1:8790` (after adb reverse) points 分享… at a local Worker (wrangler dev), with its
+            // own device file so the real one stays registered; no argument goes back to cicada.indaloop.app.
+            "shareserver" -> {
+                app.share.base = arg.ifEmpty { "https://cicada.indaloop.app" }.trimEnd('/')
+                app.share.deviceFile = if (arg.isEmpty()) null else File(cicada.Paths.root, "share-device-local.json")
+                return mapOf("shareserver" to app.share.base)
+            }
+            // What is on the clipboard (the app must be in front to read it).
+            "clipboard" -> return mapOf("clipboard" to app.getSystemService(android.content.ClipboardManager::class.java)
+                .primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString())
             "shares" -> return mapOf("shares" to cicada.ShareStore.all().mapValues { (_, r) ->
                 mapOf("id" to r.id, "url" to r.url, "scope" to r.scope, "password" to r.password, "expiresAt" to cicada.Iso8601.write(r.expiresAt))
             })

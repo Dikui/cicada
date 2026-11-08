@@ -133,6 +133,21 @@ data class ShareRecord(
         "scope" to scope, "password" to password, "createdAt" to Iso8601.write(createdAt),
     )
 
+    /// Whole days the link stays open, rounded up. Ten minutes of slack: the server's clock, not
+    /// the phone's, set the expiry.
+    fun daysLeft(now: Instant = Instant.now()): Long =
+        maxOf(1L, Math.ceil((expiresAt.epochSecond - now.epochSecond - 600) / 86400.0).toLong())
+
+    /// What 生成并复制 and 复制 put on the clipboard (and 分享 sends), in the UI's language: the
+    /// title, the link on a line of its own (chat apps then make it a link), the password and how
+    /// long it stays open (ShareSheet.clipboardText on the Mac).
+    fun message(title: String, now: Instant = Instant.now()): String {
+        val left = daysLeft(now)
+        val valid = if (left >= 365) Strings.L("1 年内有效") else Strings.LF("%lld 天内有效", left)
+        val last = password?.let { Strings.LF("密码：%@（%@）", it, valid) } ?: valid
+        return listOf(Strings.LF("「%@」会议记录", title), url, last).joinToString("\n")
+    }
+
     companion object {
         fun from(o: Map<String, Any?>): ShareRecord? {
             val id = o["id"].str() ?: return null
@@ -186,6 +201,11 @@ class ShareClient(
     /// The dev build can point at a local Worker.
     var base: String = "https://cicada.indaloop.app",
 ) {
+    /// Where this phone's key and registration live; the dev build gives a local Worker its own
+    /// file so switching back never re-registers with cicada.indaloop.app.
+    var deviceFile: File? = null
+    private val keyFile get() = deviceFile ?: ShareStore.deviceFile
+
     sealed class Outcome {
         class Shared(val record: ShareRecord) : Outcome()
         class Blocked(val hits: List<ShareHit>, val kept: List<Int>) : Outcome()
@@ -208,7 +228,7 @@ class ShareClient(
     private class Device(val seed: ByteArray, val pub: ByteArray, val id: String?, val server: String?)
 
     private fun loadDevice(): Device {
-        val o = try { Json.parseObject(ShareStore.deviceFile.readText()) } catch (_: Exception) { null }
+        val o = try { Json.parseObject(keyFile.readText()) } catch (_: Exception) { null }
         val seed = try { o?.get("key").str()?.let { Base64.getDecoder().decode(it) } } catch (_: Exception) { null }
         if (o != null && seed != null && seed.size == 32) return Device(seed, Ed25519.publicKey(seed), o["device"].str(), o["server"].str())
         val fresh = ByteArray(32).also(random::nextBytes)
@@ -217,7 +237,7 @@ class ShareClient(
     }
 
     private fun saveDevice(seed: ByteArray, id: String?, server: String?) {
-        ShareStore.writePrivate(ShareStore.deviceFile, Json.write(mapOf("key" to Base64.getEncoder().encodeToString(seed), "device" to id, "server" to server)))
+        ShareStore.writePrivate(keyFile, Json.write(mapOf("key" to Base64.getEncoder().encodeToString(seed), "device" to id, "server" to server)))
     }
 
     /// The device, registering this phone with the server first if needed (one at a time).

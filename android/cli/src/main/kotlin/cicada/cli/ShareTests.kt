@@ -22,7 +22,25 @@ object ShareTests {
         "ed25519MatchesRfc8032" to ::ed25519Vectors,
         "ed25519VerifiesWithTheJdk" to ::ed25519Jdk,
         "shareClientRegistersOnceAndSigns" to ::clientSigns,
+        "shareMessageInTheUiLanguage" to ::message,
     )
+
+    /// 生成并复制's clipboard: title, link, password with how long it stays open (the Mac's clipboardText).
+    private fun message() {
+        val now = java.time.Instant.parse("2026-11-08T10:00:00Z")
+        fun record(days: Long, pw: String?) =
+            ShareRecord("A", "https://test/s/A", "tok", now.plusSeconds(days * 86400 - 5), "notes", pw, now)
+        try {
+            loadStrings("zh-Hans")
+            equal("「周会」会议记录\nhttps://test/s/A\n密码：ruby-41-lake（7 天内有效）", record(7, "ruby-41-lake").message("周会", now), "zh, password")
+            equal("「周会」会议记录\nhttps://test/s/A\n1 年内有效", record(365, null).message("周会", now), "zh, a year, no password")
+            loadStrings("en")
+            equal("Meeting record: Weekly\nhttps://test/s/A\nPassword: ruby-41-lake (valid for 30 days)", record(30, "ruby-41-lake").message("Weekly", now), "en, password")
+            equal("Meeting record: Weekly\nhttps://test/s/A\nvalid for 7 days", record(7, null).message("Weekly", now), "en, no password")
+            loadStrings("ja")
+            equal("会議記録：週例\nhttps://test/s/A\nパスワード：pw-pw-pw（1 年間有効）", record(365, "pw-pw-pw").message("週例", now), "ja")
+        } finally { loadStrings("zh-Hans") }
+    }
 
     private fun check(ok: Boolean, what: String) { if (!ok) throw AssertionError(what) }
     private fun <T> equal(expected: T, actual: T, what: String) { if (expected != actual) throw AssertionError("$what: expected «$expected», got «$actual»") }
