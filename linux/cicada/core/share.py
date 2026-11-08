@@ -258,7 +258,8 @@ class ShareRecord:
             return None
 
     def days_left(self, now: float | None = None) -> int:
-        return max(1, math.ceil((self.expiresAt - (time.time() if now is None else now)) / 86400))
+        # The server sets the expiry by its own clock: an hour's slack keeps a fresh 7-day link at 7.
+        return max(1, math.ceil((self.expiresAt - (time.time() if now is None else now) - 3600) / 86400))
 
 
 def _utc(t: float):

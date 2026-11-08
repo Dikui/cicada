@@ -279,17 +279,23 @@ struct ShareSheet: View {
         }
     }
 
+    /// Days until the link closes. The server sets the expiry by its own clock, so a Mac a second
+    /// behind it would round a fresh 7-day link up to 8: an hour's slack.
+    static func daysLeft(_ r: ShareRecord) -> Int {
+        max(1, Int(ceil((r.expiresAt.timeIntervalSinceNow - 3600) / 86400)))
+    }
+
     /// What 复制链接和密码 puts on the clipboard, in the UI's language: the title, the link on a line
     /// of its own (chat apps then make it a link), the password and how long it stays open.
     static func clipboardText(_ r: ShareRecord, title: String) -> String {
-        let left = max(1, Int(ceil(r.expiresAt.timeIntervalSinceNow / 86400)))
+        let left = Self.daysLeft(r)
         let valid = left >= 365 ? L("1 年内有效") : L("\(left) 天内有效")
         let last = r.password.map { L("密码：\($0)（\(valid)）") } ?? valid
         return [L("「\(title)」会议记录"), r.url, last].joined(separator: "\n")
     }
 
     private func status(_ r: ShareRecord) -> String {
-        let left = max(1, Int(ceil(r.expiresAt.timeIntervalSinceNow / 86400)))
+        let left = Self.daysLeft(r)
         let expiry = L("\(left) 天后失效")
         guard let views else { return expiry }
         return expiry + " · " + L("打开 \(views) 次")
