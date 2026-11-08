@@ -1375,3 +1375,7 @@
 "去掉这些内容后就没有可分享的了。" = "Nothing would be left to share without these.";
 "这场会议没有可分享的内容。" = "This meeting has nothing to share.";
 "还有 %lld 处" = "And %lld more";
+
+/* Dock */
+"在 Dock 中显示" = "Show in Dock";
+"关掉后只在菜单栏，打开窗口时才出现" = "Off: menu bar only, in the Dock just while a window is open";

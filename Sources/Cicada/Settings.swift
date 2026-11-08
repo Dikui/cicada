@@ -170,6 +170,12 @@ final class AppSettings: ObservableObject {
     /// The text model in use, for display.
     var textModel: String { aiConfig.textModel }
 
+    /// Keep the icon in the Dock while Cicada runs. Off: menu bar only, the icon showing just while
+    /// the main, settings or onboarding window is open.
+    @Published var showInDock: Bool {
+        didSet { save() }
+    }
+
     /// End the meeting when the meeting app it was heard through hangs up.
     @Published var endWithApp: Bool {
         didSet { save() }
@@ -264,6 +270,7 @@ final class AppSettings: ObservableObject {
         displayMode = defaults.string(forKey: "displayMode") ?? "notes"
         speakVoices = defaults.dictionary(forKey: "speakVoices") as? [String: String] ?? [:]
         endWithApp = defaults.object(forKey: "endWithApp") as? Bool ?? true
+        showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
         silenceEnd = defaults.string(forKey: "silenceEnd") ?? "prompt"
         silenceMinutes = defaults.object(forKey: "silenceMinutes") as? Double ?? 10
         listenSource = ["room", "both"].contains(defaults.string(forKey: "listenSource")) ? defaults.string(forKey: "listenSource")! : "system"
@@ -319,6 +326,7 @@ final class AppSettings: ObservableObject {
         defaults.set(displayMode, forKey: "displayMode")
         defaults.set(speakVoices, forKey: "speakVoices")
         defaults.set(endWithApp, forKey: "endWithApp")
+        defaults.set(showInDock, forKey: "showInDock")
         defaults.set(silenceEnd, forKey: "silenceEnd")
         defaults.set(silenceMinutes, forKey: "silenceMinutes")
         defaults.set(listenSource, forKey: "listenSource")

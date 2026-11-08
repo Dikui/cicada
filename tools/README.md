@@ -33,6 +33,7 @@
   - 声音：`voice:<语言>[=<id>]`、`voicePreview:<语言>=<id>`、`voiceCloneFile:<wav>`、`voicePicker:<on|off>`
   - 诊断：`diagnostics:<on|off>`、`diagReport`
   - 语音模型与“听不出”：`models:<已装,…>/<系统语言,…>` 假装本机只装了这些语音模型、系统是这些语言（`models:none/zh-Hans-CN` 是一个都没装，末尾加 `@<秒>` 让后台下载至少花这么久；之后下载的会加进来），`models:off` 回到真实情况；`source:<auto|locale>` 改“听到”（自动识别或指定语言），`pickLanguage:<locale>` 等于在“听不出”里点这种语言，`releaseModel:<locale>` 退还一个本 App 保留的语音模型。`modelFail:<offline|disk|limit|other>` 让之后的语音模型下载都按这个原因失败（`modelFail:off` 结束），`network:<on|off|real>` 假装断网、联网或跟随真实网络，`modelRetry` 等于点“再试一次”。`cloud:on` 等于点“先用 ○○ 听”（下载慢时让 AI 服务代听，只有 Ling 能听），`cloud:off` 等于点“换回等待”，`cloud:decline` 等于点“继续等”，`cloud:state` 把服务、是否提供、是否在听、正在下载哪个模型写进日志；配 `models:…@<秒>` 测下载慢、装好后自动换回（日志 `cloud: … is on the Mac`）。用没装过的语言（比如法语）能测真实的后台下载；注意 macOS 每个 App 最多保留 5 种语音模型
+  - Dock：`dock:<on|off>` 改“在 Dock 中显示”，`dockRender:<png>` 画出当前的 Dock 图标（录音时带橙点），`state:display` 里的 `dock` 是否显示在 Dock
   - 更新与登录项：`updateFeed:<url>`、`updateCheck`、`updateInstall`、`updateState`、`loginItem[:on|off]`
   - 完整、最新的清单以 `AppModel.debugCommand` 里的 `switch` 为准。
 

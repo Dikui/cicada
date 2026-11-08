@@ -1998,6 +1998,11 @@ final class AppModel: ObservableObject {
             let parts = arg.split(separator: ",").map(String.init)
             Task { await notes.replay(parts[0], step: parts.count > 1 ? Int(parts[1]) ?? 4 : 4) }
         case "notesShow": notes.show(arg)
+        case "dock": settings.showInDock = arg != "off"  // 在 Dock 中显示
+        case "dockRender":  // dockRender:<png>: the Dock tile as drawn now
+            guard let v = NSApp.dockTile.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { debugFail("dock: no tile"); break }
+            v.cacheDisplay(in: v.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: arg))
         case "notesCapturable": notesWindow.setCapturable(arg != "off")
         case "notesShare": setNotesCapturable(arg != "off")  // the setting itself, as its badge or switch does
         case "notesClose": notesWindow.performClose()
@@ -2278,13 +2283,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     private var settingsWindow: NSWindow?
     private var pollTimer: Timer?
     private var runningObserver: Any?
+    private var dockObserver: Any?
     private var popoverClickMonitor: Any?
     private lazy var menu = AppMenu(model: model)
     /// Held here: a toolbar keeps only a weak reference to its delegate.
     private lazy var mainToolbar = MainToolbar(model: model)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(model.settings.showInDock ? .regular : .accessory)
         menu.showMainWindow = { [weak self] in self?.showMainWindow() }
         menu.showOnboarding = { [weak self] in self?.showOnboarding() }
         menu.install()
@@ -2299,6 +2305,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             self?.statusItem.button?.image = BrandImage.menuBar(live: live, badge: badge)
             self?.statusItem.button?.toolTip = problem ?? update.map { L("有新版本 \($0.version)") }
             debugLog("menu bar: badge=\(badge) tooltip=\(problem ?? "-")")
+            DockIcon.show(live: live)
+        }
+        dockObserver = model.settings.$showInDock.dropFirst().sink { [weak self] _ in
+            // After the change lands: the observer fires before the property is set.
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.updateActivationPolicy() } }
         }
         let poll = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.model.refreshPermissions() }
@@ -2371,6 +2382,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         if open.isEmpty { showMainWindow() } else { open.forEach { $0.deminiaturize(nil) }; NSApp.activate() }
         return false
     }
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? { menu.dockMenu() }
 
     /// Quitting ends the meeting being recorded: ask first.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -2524,15 +2537,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         }
     }
 
-    /// A regular app (name and menus top left, Dock icon, ⌘Tab) while the main, settings or
-    /// onboarding window is open; only the menu bar item otherwise. The notes window doesn't
-    /// count: it floats beside the meeting app and never takes focus from it.
+    /// A regular app (name and menus top left, Dock icon, ⌘Tab) while 在 Dock 中显示 is on, or
+    /// else while the main, settings or onboarding window is open; only the menu bar item otherwise.
+    /// The notes window doesn't count: it floats beside the meeting app and never takes focus from
+    /// it (a regular app doesn't change that: the panel is non-activating either way).
     func updateActivationPolicy(closing: NSWindow? = nil) {
         let open = [mainWindow, onboardingWindow, settingsWindow].contains { $0 != nil && $0 != closing && $0!.isVisible }
-        let policy: NSApplication.ActivationPolicy = open ? .regular : .accessory
+        let policy: NSApplication.ActivationPolicy = open || model.settings.showInDock ? .regular : .accessory
         guard NSApp.activationPolicy() != policy else { return }
         NSApp.setActivationPolicy(policy)
-        debugLog("activation policy → \(open ? "regular" : "accessory")")
+        debugLog("activation policy → \(policy == .regular ? "regular" : "accessory")")
+        // Back from .accessory the Dock can show a blank icon until the tile is drawn again.
+        DockIcon.show(live: model.running)
     }
 
     // MARK: Output device changes

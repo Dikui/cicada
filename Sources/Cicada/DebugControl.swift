@@ -106,6 +106,7 @@ extension AppModel {
             "overlay": ["shown": self.overlay.isShown, "expanded": self.overlay.expanded],
             "keyWindow": NSApp.keyWindow?.title ?? "",
             "onboardingStep": self.onboardingStep, "mainShow": self.mainShow ?? "",
+            "dock": ["shown": NSApp.activationPolicy() == .regular, "setting": self.settings.showInDock, "live": DockIcon.live],
         ] }
         all["notes"] = { [
             "state": "\(self.notes.state)", "topics": self.notes.notes.topics.count,
