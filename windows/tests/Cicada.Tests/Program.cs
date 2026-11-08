@@ -904,6 +904,15 @@ static class Tests
         Equal(2.0, next.Todos[0].T, "to-dos too");
     }
 
+    /// A heard form only a fix wrote ("platform" for 平台) isn't one: it would teach the translator
+    /// and the next fix the same mistake.
+    public static void NotesTermsKeepOnlyFormsTheRecognizerWrote()
+    {
+        var l = new TranscriptLine { Id = "a", Speaker = "them", Src = "我们 twoty 平台", SrcLang = "zh-CN", DstLang = "en", Fixes = [new LineFix("平台", "platform")] };
+        var terms = new List<NoteTerm> { new() { Name = "X平台", Note = "n", Heard = ["Xplatform", "platform", "Twoty"] } };
+        Equal("Twoty", string.Join("|", NotesEngine.HeardAsSaid(terms, [l]).First().Heard), "heard forms");
+    }
+
     public static void NotesAndExportNameSpeakersLikeTheMac()
     {
         // Two voices, five substantive lines each: 说话人 1 (voice 7) and 说话人 2 (voice 9).
