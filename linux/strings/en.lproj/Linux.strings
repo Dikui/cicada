@@ -208,3 +208,5 @@
 /* 改正听错的词: Linux-only wording (a computer, not a Mac; one more text request per line) */
 "最多 %lld 个，满了优先用最近的。只存在这台电脑上" = "Up to %lld, recent ones first. Stored only on this computer";
 "每句多发一次文字请求" = "One more text request per sentence";
+/* 在 Dock 中显示: the top bar, not a menu bar */
+"关掉后只在顶栏，打开窗口时才出现" = "Off: top bar only, in the Dock just while a window is open";

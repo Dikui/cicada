@@ -37,6 +37,7 @@ class AppSettings:
         "sampleSeen": False,
         "speakLater": False,         # 还差几步 › 同声传译 › 以后再说
         "trayHintShown": False,      # 知了还在顶栏, said once after the records window is first closed
+        "showInDock": True,          # 在 Dock 中显示 (the Mac's): in the dock for as long as 知了 runs
         "uiLanguage": "system",      # "system", "zh-Hans", "en", "ja" or "ko"
         # 同声传译: what I say is interpreted and spoken into 知了 麦克风 (the Mac's speakEnabled etc.).
         # 保存会议录音 (the Mac's recordAudio): system.m4a beside session.json, when GStreamer has an AAC encoder.

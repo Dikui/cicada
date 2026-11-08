@@ -30,7 +30,12 @@ class RecordsWindow(Gtk.Window):
         self.set_size_request(720, 480)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_wmclass("cicada", "Cicada")
-        self.connect("delete-event", lambda *_: self.hide() or self.app.records_closed() or True)
+        self.connect("delete-event", lambda *_: self.close_to_dock() or self.app.records_closed() or True)
+        # Minimized it isn't refilled on every change of a meeting; it catches up when it comes back.
+        self.iconified = False
+        self.parked = False  # minimized by 知了 to keep its dock icon (Controller.keep_in_dock)
+        self.connect("window-state-event", self._state_changed)
+        self.connect("hide", lambda *_: setattr(self, "iconified", False) or setattr(self, "parked", False))
         self.selected = None
         self.pending_delete = None  # a record deleted but still undoable
         self.query = ""
@@ -337,6 +342,35 @@ class RecordsWindow(Gtk.Window):
             self._fill_listen_box()
         return True
 
+    def close_to_dock(self) -> None:
+        """✕: hidden, or with 在 Dock 中显示 on, minimized: the dock lists 知了 only while it has a window."""
+        if self.app.settings.showInDock:
+            self.parked = True
+            self.iconify()
+        else:
+            self.hide()
+
+    def _state_changed(self, _w, event) -> bool:
+        if event.changed_mask & Gdk.WindowState.ICONIFIED and not event.new_window_state & Gdk.WindowState.WITHDRAWN:
+            self.iconified = bool(event.new_window_state & Gdk.WindowState.ICONIFIED)
+            if not self.iconified:
+                self.refresh()  # back from the dock: what changed while it was minimized
+                # Mapped minimized, Mutter flicks it to normal and back within a few ms: only a
+                # window still up a moment later was brought back (by the dock, or Alt+Tab).
+                GLib.timeout_add(200, self._restored)
+        return False
+
+    def _restored(self) -> bool:
+        if self.parked and not self.iconified and self.get_mapped() and self.is_active():
+            self.parked = False
+            # Mapped minimized, it isn't drawn when it comes back (seen with the notes window up):
+            # presenting it, which it already is (active: the WM brought it back, not the flick),
+            # gets it drawn.
+            self.present()
+            self.set_focus(None)
+            Log.d("dock: records window brought back")
+        return False
+
     # List
 
     def refresh(self) -> None:
@@ -346,7 +380,7 @@ class RecordsWindow(Gtk.Window):
 
         def run():
             self._queued = False
-            if self.get_visible():
+            if self.get_visible() and not self.iconified:
                 self.fill()
                 self.fix_toast()
             return False

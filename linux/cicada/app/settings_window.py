@@ -196,6 +196,9 @@ class SettingsWindow(Gtk.Window):
         switch = Gtk.Switch()
         switch.set_active(autostart_enabled())
         switch.connect("notify::active", lambda w, _p: set_autostart(w.get_active(), app.launcher))
+        dock = Gtk.Switch()
+        dock.set_active(s.showInDock)
+        dock.connect("notify::active", lambda w, _p: app.set_show_in_dock(w.get_active()))
         warn = ui.hbox(12)
         warn_icon = ui.icon("view-reveal-symbolic", 15)
         ui.classes(warn_icon, "warn")
@@ -206,6 +209,7 @@ class SettingsWindow(Gtk.Window):
         page.pack_start(self._group(L("正在听时"), ui.boxed([
             ui.prow(L("悬浮窗"), ui.segmented([("notes", L("实时纪要")), ("subtitles", L("字幕条"))], s.view, app.set_view)),
             ui.prow(L("登录时打开"), switch, L("登录后在顶栏待命")),
+            ui.prow(L("在 Dock 中显示"), dock, L("关掉后只在顶栏，打开窗口时才出现")),
             self._shortcut_row(),
             warn_row])), False, False, 0)
 

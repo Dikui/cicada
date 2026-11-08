@@ -97,7 +97,8 @@ def _window(w) -> dict | None:
     gdk = w.get_window()
     return {"visible": w.get_visible(), "x": x, "y": y, "w": width, "h": height, "title": w.get_title(),
             "xid": gdk.get_xid() if gdk is not None and hasattr(gdk, "get_xid") else None,
-            "acceptFocus": w.get_accept_focus(), "active": w.is_active()}
+            "acceptFocus": w.get_accept_focus(), "active": w.is_active(),
+            "iconified": getattr(w, "iconified", None)}
 
 
 def _speakers(app, s) -> dict:
@@ -239,6 +240,16 @@ def command(app, line: str) -> dict:
     if cmd == "view":
         app.set_view(arg)
         return {"ok": True, "view": app.settings.view}
+    if cmd == "dock":  # dock on|off: 在 Dock 中显示, as its switch sets it
+        if arg in ("on", "off"):
+            app.set_show_in_dock(arg == "on")
+        w = app.records_window
+        return {"ok": True, "on": app.settings.showInDock, "records": _window(w),
+                "parked": w.parked if w is not None else None}
+    if cmd == "close" and arg == "records":  # the ✕ of the records window
+        if app.records_window is not None:
+            app.records_window.close()
+        return {"ok": True}
     if cmd == "show":
         {"records": app.show_records, "notes": app.show_notes, "settings": app.show_settings,
          "onboarding": app.show_onboarding}[arg]()

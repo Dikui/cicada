@@ -241,6 +241,7 @@ class Controller:
             self.show_records()  # where 已更新到 … is said, once
             self.records_window.toasts.show(reopened)
         self.updates.start()
+        self.keep_in_dock()
 
     def changed(self) -> None:
         """Engine threads call this: one coalesced refresh on the main loop."""
@@ -277,17 +278,61 @@ class Controller:
         self.notes_window.refresh()
         self.notes_window.show_all()
 
-    def show_records(self) -> None:
-        from . import media
-        media.rescan()  # a recording plays once the formats are installed, no restart
+    def _records(self):
         if self.records_window is None:
             from .records_window import RecordsWindow
             self.records_window = RecordsWindow(self)
             self.application.add_window(self.records_window)
-        self.records_window.fill()
-        self.records_window.show_all()
+        return self.records_window
+
+    def show_records(self) -> None:
+        from . import media
+        media.rescan()  # a recording plays once the formats are installed, no restart
+        w = self._records()
+        if w.get_visible() and w.iconified:
+            # Minimized (keep_in_dock), Mutter won't bring it back for a request without a user's
+            # event time (the tray, a second launch): shown afresh instead, as when it was hidden.
+            w.hide()
+        w.fill()
+        w.set_focus_on_map(True)
+        w.deiconify()  # unmapped, this only clears GTK's "map it minimized" (keep_in_dock's iconify)
+        w.show_all()
         self.records_window.present()
         self.records_window.set_focus(None)  # not the search box: its placeholder would vanish
+
+    @property
+    def records_open(self) -> bool:
+        """On screen: not hidden, nor minimized to keep the dock icon (a dialog over it would be too)."""
+        w = self.records_window
+        return w is not None and w.get_visible() and not w.iconified
+
+    def keep_in_dock(self) -> None:
+        """在 Dock 中显示 (the Mac's showInDock): GNOME's dock lists an app only while it has a window
+        there, and the notes window, a notification that never takes focus, has none. So while the
+        setting is on the records window stays, minimized, and clicking the dock icon brings it back.
+        Mapped minimized and never presented: the meeting app keeps the focus."""
+        w = self.records_window
+        if not self.settings.showInDock or (w is not None and w.get_visible()):
+            return
+        w = self._records()
+        w.fill()
+        w.parked = True
+        w.set_focus_on_map(False)
+        w.iconify()  # before it's mapped: it starts minimized (WM_HINTS IconicState)
+        w.show_all()
+        w.set_focus(None)  # back from the dock, not in the search box: its placeholder would vanish
+        Log.d("dock: records window kept minimized")
+
+    def set_show_in_dock(self, on: bool) -> None:
+        """设置 › 在 Dock 中显示. Off: as before it existed, the records window only while it's open."""
+        self.settings.showInDock = on
+        self.settings.save()
+        w = self.records_window
+        if on:
+            self.keep_in_dock()
+        elif w is not None and w.parked:
+            w.hide()
+        Log.d("dock: %s" % ("on" if on else "off"))
 
     def show_settings(self, ai: bool = False, general: bool = False) -> None:
         """设置; `ai`: at AI 服务 (its first section), where every AI problem is fixed; `general`: at 通用
@@ -351,13 +396,13 @@ class Controller:
         self.onboarding = Onboarding(self, at)
         self.application.add_window(self.onboarding)
         # Over the records window, so closing it leaves a window to click, not an empty screen.
-        if self.records_window is not None and self.records_window.get_visible():
+        if self.records_open:
             self.onboarding.set_transient_for(self.records_window)
             self.onboarding.set_position(Gtk.WindowPosition.CENTER_ON_PARENT)
 
         def closed(*_):
             self.onboarding = None
-            if self.tray is None and (self.records_window is None or not self.records_window.get_visible()):
+            if self.tray is None and not self.records_open:
                 self.show_records()
             self.changed()
         self.onboarding.connect("destroy", closed)
@@ -704,7 +749,7 @@ class Controller:
             title, body = LF("连不上 %@", name), ling.message()
             hint = r.proxy_line(name, ling.service_host)
             fix = L("重新检查并开始")
-        dialog = Gtk.Dialog(transient_for=self.records_window if self.records_window and self.records_window.get_visible() else None,
+        dialog = Gtk.Dialog(transient_for=self.records_window if self.records_open else None,
                             modal=True)
         dialog.set_decorated(False)
         dialog.set_resizable(False)

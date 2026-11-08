@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drives the running dev build through its control socket (cicada/app/debug.py has the commands):
   cicadactl state | start | stop | feed <wav> | sample | view notes|subtitles | show records|notes|settings|onboarding
-            target <code> | key-reload | windows | quit
+            target <code> | key-reload | windows | quit | dock [on|off] | close records
             calls <program=name,…>|none|real | realcalls | endtimes <silence> <countdown> <grace>|off | endkeep
             notes-tab notes|transcript | notes-search <text> | notes-wide on|off | onboarding-step <n> | settings-scroll <0-1>
             codecs | play [<seconds>] | pause | rate | playstate | settings-general (保存会议录音 and its player)

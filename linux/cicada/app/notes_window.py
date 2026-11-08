@@ -51,6 +51,8 @@ class NotesWindow(Gtk.Window):
         self._bottom = None  # the subtitle bar's bottom edge: it grows upward as text wraps
         self.connect("configure-event", self._configured)
         self.connect("realize", lambda w: x11.never_take_focus(w.get_window()))
+        # Mutter flags it as demanding attention once it's mapped (just after map-event).
+        self.connect("map-event", lambda w, _e: GLib.timeout_add(200, lambda: x11.no_attention(w.get_window()) or False) and False)
         self.connect("delete-event", lambda *_: self.hide() or True)
         self._queued = False
         self._built = False
