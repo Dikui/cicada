@@ -47,6 +47,7 @@ class ShareDialog:
         self.views = None
         self.confirm = False
         self.copied = None
+        self.show_options = False
         self.hits, self.kept, self.record, self.message = [], [], None, ""
         self.busy = False
 
@@ -115,20 +116,36 @@ class ShareDialog:
         content.pack_start(seg, False, False, 0)
         self.body.pack_start(content, False, False, 0)
 
-        days = Gtk.ComboBoxText()
-        for n, label in zip(share.DAYS, (L("7 天"), L("30 天"), L("1 年"))):
-            days.append(str(n), label)
-        days.set_active_id(str(self.days))
-        days.connect("changed", lambda c: setattr(self, "days", int(c.get_active_id())))
-        self.body.pack_start(self._row(L("有效期"), days), False, False, 0)
-        self.body.pack_start(self._row(L("显示说话人名字"), self._switch(self.names, lambda v: setattr(self, "names", v))),
-                             False, False, 0)
+        go = ui.button(L("生成并复制"), self.go, "darkbtn")
+        if self.show_options:
+            self._options(go)
+        else:
+            # The choices already made, in one line; 更改 opens them in place.
+            line = ui.hbox(8)
+            line.pack_start(ui.text(share.summary(self.use_password, self.days, self.names), 13, "secondary", wrap=False),
+                            True, True, 0)
 
+            def change():
+                self.show_options = True
+                self.render()
+            more = ui.button(L("更改"), change, "outline")
+            more.set_valign(Gtk.Align.CENTER)
+            line.pack_end(more, False, False, 0)
+            self.body.pack_start(line, False, False, 0)
+        if not self.use_password:
+            self.body.pack_start(ui.text(L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。"), 12, "tertiary",
+                                         width_chars=46), False, False, 0)
+        go.set_sensitive(not self.use_password or len(self.password) >= 6)
+        self.body.pack_start(self._buttons(ui.button(L("取消"), self.close, "outline"), go), False, False, 0)
+        go.set_can_default(True)
+        self.window.set_default(go)
+
+    def _options(self, go) -> None:
+        """Password, expiry, names and the preview's summary, as the Mac lists them once 更改 is pressed."""
         def password(v):
             self.use_password = v
             self.render()
         self.body.pack_start(self._row(L("用密码保护"), self._switch(self.use_password, password)), False, False, 0)
-        go = ui.button(L("生成链接"), self.go, "darkbtn")
         if self.use_password:
             entry = Gtk.Entry()
             entry.set_text(self.password)
@@ -145,16 +162,17 @@ class ShareDialog:
             row.pack_start(entry, True, True, 0)
             row.pack_start(ui.button(L("换一个"), again, "outline"), False, False, 0)
             self.body.pack_start(row, False, False, 0)
-            go.set_sensitive(len(self.password) >= 6)
-        elif self.has_notes:
+        days = Gtk.ComboBoxText()
+        for n, label in zip(share.DAYS, (L("7 天"), L("30 天"), L("1 年"))):
+            days.append(str(n), label)
+        days.set_active_id(str(self.days))
+        days.connect("changed", lambda c: setattr(self, "days", int(c.get_active_id())))
+        self.body.pack_start(self._row(L("有效期"), days), False, False, 0)
+        self.body.pack_start(self._row(L("显示说话人名字"), self._switch(self.names, lambda v: setattr(self, "names", v))),
+                             False, False, 0)
+        if not self.use_password and self.has_notes:
             self.body.pack_start(self._row(L("预览卡显示摘要"), self._switch(self.summary, lambda v: setattr(self, "summary", v))),
                                  False, False, 0)
-        self.body.pack_start(ui.text(L("建议把链接和密码分两条消息发送。") if self.use_password
-                                     else L("内容将上传至 cicada.indaloop.app，拿到链接的人都能看。"), 12, "tertiary", width_chars=46),
-                             False, False, 0)
-        self.body.pack_start(self._buttons(ui.button(L("取消"), self.close, "outline"), go), False, False, 0)
-        go.set_can_default(True)
-        self.window.set_default(go)
 
     def options(self) -> share.Options:
         return share.Options(scope=self.scope, days=self.days, names=self.names,
@@ -181,7 +199,7 @@ class ShareDialog:
             return
         if out.kind == "shared":
             self.record, self.views, self.confirm = out.record, 0, False
-            self._copy(out.record.url, "link")
+            self._copy(self._message(out.record), "all")
             self.step = "done"
         elif out.kind == "blocked":
             self.hits, self.kept, self.step = out.hits, out.kept, "blocked"
@@ -259,22 +277,48 @@ class ShareDialog:
 
     # Done
 
-    def _field(self, value: str, copy_label: str, what: str) -> Gtk.Widget:
-        l = ui.text(value, 12, "ink", wrap=False, selectable=True)
-        ui.classes(l, "mono")
-        l.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
-        row = ui.hbox(8)
-        row.pack_start(ui.panel(ui.pad(l, 6, 8), "sharefield"), True, True, 0)
-        row.pack_start(ui.button(L("已复制") if self.copied == what else copy_label,
-                                 lambda: (self._copy(value, what), self.render()), "outline"), False, False, 0)
-        return row
+    def _message(self, r) -> str:
+        return share.clipboard_text(r, session_store.display_title(self.s))
+
+    def _copy_control(self, r) -> Gtk.Widget:
+        """复制 puts the link and the password on the clipboard as one message; with a password, its
+        arrow copies either alone, for whoever sends them apart."""
+        def copy(text, what):
+            self._copy(text, what)
+            self.render()
+        main = ui.button(L("复制") if self.copied is None else L("已复制"), lambda: copy(self._message(r), "all"), "outline")
+        main.set_valign(Gtk.Align.CENTER)
+        if not r.password:
+            return main
+        menu = Gtk.Menu()
+        for label, text, what in ((L("只复制链接"), r.url, "link"), (L("只复制密码"), r.password, "password")):
+            item = Gtk.MenuItem(label=label)
+            item.connect("activate", lambda _i, t=text, w=what: GLib.idle_add(lambda: copy(t, w) and False))
+            menu.append(item)
+        menu.show_all()
+        arrow = Gtk.MenuButton()
+        arrow.set_popup(menu)
+        arrow.add(ui.icon("pan-down-symbolic", 12))
+        ui.classes(arrow, "outline", "arrow")
+        box = ui.hbox(0, main, arrow)
+        ui.classes(box, "linked", "copybtn")
+        box.set_valign(Gtk.Align.CENTER)
+        return box
 
     def _done(self) -> None:
         r = self.record
-        self._header(L("链接已复制") if self.copied == "link" else L("已分享"))
-        self.body.pack_start(self._field(r.url, L("复制链接"), "link"), False, False, 0)
+        self._header((L("链接和密码已复制") if r.password else L("链接已复制")) if self.copied == "all" else L("已分享"))
+        url = ui.text(r.url, 12, "ink", wrap=False, selectable=True)
+        url.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        field = ui.vbox(4, url)
         if r.password:
-            self.body.pack_start(self._field(r.password, L("复制密码"), "password"), False, False, 0)
+            field.pack_start(ui.text(LF("密码：%@", r.password), 12, "secondary", wrap=False, selectable=True), False, False, 0)
+        for l in field.get_children():
+            ui.classes(l, "mono")
+        row = ui.hbox(8)
+        row.pack_start(ui.panel(ui.pad(field, 6, 8), "sharefield"), True, True, 0)
+        row.pack_start(self._copy_control(r), False, False, 0)
+        self.body.pack_start(row, False, False, 0)
         status = LF("%lld 天后失效", r.days_left())
         if self.views is not None:
             status += " · " + LF("打开 %lld 次", self.views)
@@ -384,7 +428,8 @@ class ShareDialog:
                 "password": self.use_password, "summary": self.summary, "busy": self.busy, "confirm": self.confirm,
                 "hits": self.hits, "kept": self.kept, "removed": sorted(self.removed), "dropNotes": self.drop_notes,
                 "left": self._left_after() if self.step == "blocked" else None, "message": self.message or None,
-                "url": r.url if r else None, "views": self.views}
+                "url": r.url if r else None, "views": self.views, "options": self.show_options, "copied": self.copied,
+                "clipboard": Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).wait_for_text() if self.copied else None}
 
 
 def open_for(app, s, parent=None) -> ShareDialog:

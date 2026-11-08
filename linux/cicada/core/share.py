@@ -172,6 +172,23 @@ def message(code: str) -> str:
               "network": "连不上 cicada.indaloop.app，请检查网络。"}.get(code, "服务器出了问题，请稍后再试。"))
 
 
+def summary(password: bool, days: int, names: bool) -> str:
+    """The settings already chosen, in one line (无密码 · 7 天有效 · 不显示名字); 更改 opens them."""
+    return " · ".join((L("密码保护") if password else L("无密码"),
+                       L("1 年有效") if days == 365 else LF("%lld 天有效", days),
+                       L("显示名字") if names else L("不显示名字")))
+
+
+def clipboard_text(r: "ShareRecord", title: str, now: float | None = None) -> str:
+    """What 复制 puts on the clipboard, in the UI's language (ShareSheet.clipboardText): the title,
+    the link on a line of its own (chat apps then make it a link), the password and how long it
+    stays open."""
+    left = r.days_left(now)
+    valid = L("1 年内有效") if left >= 365 else LF("%lld 天内有效", left)
+    last = LF("密码：%@（%@）", r.password, valid) if r.password else valid
+    return "\n".join((LF("「%@」会议记录", title), r.url, last))
+
+
 # Passwords
 
 _WORDS = ("amber apple arrow aspen basil beach birch bloom brook cedar cherry cloud coral comet dawn delta dune ember fern "

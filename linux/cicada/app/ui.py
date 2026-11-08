@@ -110,6 +110,10 @@ dialog.endask { background-color: #FFFFFF; border: 1px solid #E4E6EA; border-rad
 /* The share dialog (ShareViews.swift): the review's hits on the accent's pale, the link and password on the fill. */
 .sharehit { background-color: #FCEDE7; border-radius: 8px; }
 .sharefield { background-color: #F2F3F5; border-radius: 6px; }
+/* The share dialog's Copy and its arrow as one control (a linked box). */
+.copybtn button.outline:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.copybtn button.outline.arrow { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-width: 0; padding: 3px 5px; }
+.copybtn button.outline.arrow image { color: #5A5F6B; }
 dialog.sharesheet separator { background-color: #EEF0F3; min-height: 1px; }
 dialog.sharesheet entry.mono { font-family: "Ubuntu Sans Mono", monospace; }
 .notice.error { background-color: #FDECEA; }

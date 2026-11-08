@@ -97,6 +97,23 @@ class ShareDocTests(unittest.TestCase):
         self.assertEqual("分享得太频繁了，请稍后再试。", share.message("too_many_shares"))
         self.assertEqual("服务器出了问题，请稍后再试。", share.message("whatever"))
 
+    def test_clipboard_message(self):
+        # One message, three lines, in the UI's language; days left round up, a year reads as a year.
+        now = 1_000_000.0
+        r = share.ShareRecord("a", "https://x/s/a", "t", now + 6.5 * 86400, "notes", "ruby-41-lake", now)
+        self.assertEqual("「周会」会议记录\nhttps://x/s/a\n密码：ruby-41-lake（7 天内有效）", share.clipboard_text(r, "周会", now))
+        r.password, r.expiresAt = None, now + 365 * 86400
+        self.assertEqual("「周会」会议记录\nhttps://x/s/a\n1 年内有效", share.clipboard_text(r, "周会", now))
+        self.assertEqual("无密码 · 7 天有效 · 不显示名字", share.summary(False, 7, False))
+        try:
+            strings.load("en", [os.path.join(REPO, "Resources")])
+            r.password, r.expiresAt = "ruby-41-lake", now + 30 * 86400
+            self.assertEqual("Meeting record: Standup\nhttps://x/s/a\nPassword: ruby-41-lake (valid for 30 days)",
+                             share.clipboard_text(r, "Standup", now))
+            self.assertEqual("Password · Open 1 year · Names shown", share.summary(True, 365, True))
+        finally:
+            strings.load("zh-Hans", [os.path.join(REPO, "Resources")])
+
 
 class Ed25519Tests(unittest.TestCase):
     # RFC 8032 §7.1, tests 1–3: secret key, public key, message, signature.

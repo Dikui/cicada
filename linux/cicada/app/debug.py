@@ -20,7 +20,8 @@ per connection, one JSON line back. Never in release builds.
   codecs (AAC encoder / decoders here) | play [<seconds>] | pause | rate (next speed) | playstate (the shown record's
   recording: state, time, length, rate, the highlighted line) | settings-general (设置 at 通用)
   share <record id>[,full][,pw] | unshare <record id> | share-last (how the last ended) | shareSheet <record id>|""
-  share-ui scope notes|full | days 7|30|365 | names|pw|summary on|off | go | strip | back | confirm | revoke | close | state"""
+  share-ui scope notes|full | days 7|30|365 | names|pw|summary on|off | options (更改) | go | strip | back | confirm
+           | copy all|link|password | revoke | close | state"""
 from __future__ import annotations
 
 import os
@@ -474,7 +475,8 @@ def _share(app, cmd: str, arg: str) -> dict:
         w.selected = arg
         w.fill()
         return {"ok": True, **share_dialog.open_for(app, s, w).state()}
-    # share-ui scope notes|full | days 7|30|365 | names|pw|summary on|off | go | strip | back | confirm | revoke | close | state
+    # share-ui scope notes|full | days 7|30|365 | names|pw|summary on|off | options | go | strip | back | confirm
+    #          | copy all|link|password | revoke | close | state
     d = app.share_dialog
     if d is None:
         return {"ok": False, "error": "no share dialog"}
@@ -493,12 +495,17 @@ def _share(app, cmd: str, arg: str) -> dict:
         d.step = "settings"
     elif act == "confirm":
         d.confirm = True
+    elif act == "options":
+        d.show_options = True
+    elif act == "copy" and d.record is not None:
+        r = d.record
+        d._copy({"link": r.url, "password": r.password or ""}.get(val) or d._message(r), val or "all")
     elif act == "revoke":
         d.revoke()
     elif act == "close":
         d.close()
         return {"ok": True}
-    if act in ("scope", "days", "names", "pw", "summary", "back", "confirm"):
+    if act in ("scope", "days", "names", "pw", "summary", "back", "confirm", "options", "copy"):
         d.render()
     return {"ok": True, **d.state()}
 
