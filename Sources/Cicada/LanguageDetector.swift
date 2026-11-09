@@ -175,8 +175,10 @@ struct LanguageDetection {
         if ranked.count == 1 {
             // The right model is ≥0.85 sure; English heard by a French model scored 0.12.
             guard best.lang == active, best.confidence >= 0.6, best.score >= 0.6 else {
-                // Asked again only by the usual triggers (a pause, 20 s more speech), or when a model
-                // arrives. One model is checked only while unsure, so this never takes back a confirmation.
+                // A confirmed language stands: one answer while confirmed is a check whose other
+                // models failed (`rank` drops them), not the one model there is saying no.
+                if confirmed { return .none }
+                // Asked again only by the usual triggers (a pause, 20 s more speech), or when a model arrives.
                 let first = !mismatch
                 verdict = .notThis
                 return .notThis(best.lang, firstTime: first)

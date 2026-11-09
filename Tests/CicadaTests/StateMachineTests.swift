@@ -80,6 +80,9 @@ import Testing
         var e = LanguageDetection()
         _ = e.apply([c(english, 0.12)], active: english)
         #expect(e.apply([c(english, 0.9)], active: english) == .confirmed(english))
+        // Confirmed, a check where only one model answered doesn't take the language back.
+        #expect(e.apply([c(english, 0.12)], active: english) == .none)
+        #expect(e.confirmed)
     }
 
     @Test func twoCloseCallsLetLinesBeKept() {
