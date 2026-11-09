@@ -33,6 +33,16 @@ import Testing
         #expect(groups.map { $0.map(\.id) } == [["a", "b", "c"], ["d"], ["e"], ["f"]])
     }
 
+    @Test func paragraphsStopGrowingOnceFull() {
+        // Fast Japanese with no break (issue #20): a few sentences to a paragraph, not 30 s of them.
+        let ja = "いつも動画をご覧いただきありがとうございます。今回は新型が届いたので開封していきます。"  // 42 letters
+        let fast = (0..<6).map { line("j\($0)", Double($0) * 4, "them", ja) }
+        #expect(TranscriptParagraphs.group(fast, [:]).map { $0.map(\.id) } == [["j0", "j1"], ["j2", "j3"], ["j4", "j5"]])
+        // Ordinary English lines: 30 s still decides.
+        let en = (0..<4).map { line("e\($0)", Double($0) * 7, "them", "we should ship the fix this week") }
+        #expect(TranscriptParagraphs.group(en, [:]).map(\.count) == [4])
+    }
+
     @Test func paragraphsSplitBetweenSpeakers() {
         let lines = [line("a", 0), line("b", 2), line("c", 4)]
         let groups = TranscriptParagraphs.group(lines, ["a": 1, "b": 2, "c": 2])

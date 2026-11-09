@@ -846,8 +846,18 @@ extension TranscriptListView {
 
 /// The notes window's transcript reads as paragraphs: one person's lines within 30 seconds of the
 /// paragraph's first are one block, one time, instead of a row and a rule for every fragment.
+/// A fast speaker fills 30 seconds with a wall of text (issue #20): a paragraph that has reached
+/// `full` takes no more lines.
 enum TranscriptParagraphs {
     static let span: Double = 30
+    /// Two or three sentences: Chinese or Japanese characters, or words.
+    static let full = (cjk: 80, words: 40)
+
+    static func isFull(_ lines: [TranscriptLine]) -> Bool {
+        let text = lines.map(\.src).joined(separator: " ")
+        let cjk = text.unicodeScalars.contains { $0.properties.isIdeographic || (0x3040...0x30FF).contains($0.value) }
+        return cjk ? text.filter(\.isLetter).count >= full.cjk : text.split(whereSeparator: \.isWhitespace).count >= full.words
+    }
 
     static func group(_ lines: [TranscriptLine], _ speakers: [String: Int]) -> [[TranscriptLine]] {
         var out: [[TranscriptLine]] = []
@@ -859,7 +869,8 @@ enum TranscriptParagraphs {
         for l in lines {
             let k = (l.speaker == "me" ? "me" : speakers[l.id].map { "n\($0)" } ?? "?") + (l.via ?? "")
             let v = speakers.isEmpty && l.speaker == "them" && SpeakerLabels.substantive(l.src) ? l.voice : nil
-            if k == key, let first = out.last?.first, l.t - first.t <= span, voice == nil || v == nil || v == voice {
+            if k == key, let p = out.last, let first = p.first, l.t - first.t <= span, !isFull(p),
+               voice == nil || v == nil || v == voice {
                 out[out.count - 1].append(l)
                 voice = voice ?? v
             } else {
