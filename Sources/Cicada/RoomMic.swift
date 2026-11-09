@@ -21,11 +21,11 @@ enum RoomMicPlan {
         var virtual = false
     }
 
-    /// The system default, unless it is the virtual mic (同声传译 makes it the default) or a
-    /// Bluetooth headset's (AirPods hear the wearer, not the table, and drop to call quality while
-    /// their mic is open); then the Mac's own microphone.
+    /// The one chosen beside 打开麦克风 while it is plugged in (a headset too: then the wearer is
+    /// all the user wants). Else the system default, unless it is the virtual mic (同声传译 makes it
+    /// the default) or a Bluetooth headset's (AirPods hear the wearer, not the table, and drop to call
+    /// quality while their mic is open); then the Mac's own microphone.
     static func pick(defaultUID: String?, inputs: [Input], preferredUID: String? = nil) -> String? {
-        // Automatic mode favors a table mic; an explicit choice may be an AirPods mic.
         if let preferred = inputs.first(where: { $0.uid == preferredUID }), !preferred.virtual {
             return preferred.uid
         }
@@ -97,20 +97,29 @@ extension AudioDevices {
     }
 
     /// The microphone `RoomMicPlan` picks among the Mac's inputs right now.
-    static var roomMic: OutputDevice? { roomMic(excluding: []) }
+    static var roomMic: OutputDevice? { roomMic() }
 
-    /// `excluding`: inputs to treat as gone (the debug command's pretend unplug).
-    static func roomMic(excluding: Set<String>, preferredUID: String? = nil) -> OutputDevice? {
-        let all = inputs().filter { !excluding.contains($0.uid) }
-        let plan = all.map { d -> RoomMicPlan.Input in
+    /// `excluding`: inputs to treat as gone (the debug command's pretend unplug). `preferredUID`: the
+    /// one chosen beside 打开麦克风 (`AppSettings.roomMicUID`).
+    static func roomMic(excluding: Set<String> = [], preferredUID: String? = nil) -> OutputDevice? {
+        let all = roomMicInputs(excluding: excluding)
+        let uid = RoomMicPlan.pick(defaultUID: defaultInput?.uid, inputs: all.map(\.plan), preferredUID: preferredUID)
+        return all.first { $0.device.uid == uid }?.device
+    }
+
+    /// The menu beside 打开麦克风: the inputs that can hear the room, the virtual ones left out.
+    static func roomMicChoices(excluding: Set<String> = []) -> [(device: OutputDevice, bluetooth: Bool)] {
+        roomMicInputs(excluding: excluding).filter { !$0.plan.virtual }.map { ($0.device, $0.plan.bluetooth) }
+    }
+
+    private static func roomMicInputs(excluding: Set<String>) -> [(device: OutputDevice, plan: RoomMicPlan.Input)] {
+        inputs().filter { !excluding.contains($0.uid) }.map { d in
             let t = transport(d.id)
-            return .init(uid: d.uid, builtIn: t == kAudioDeviceTransportTypeBuiltIn,
-                         bluetooth: t == kAudioDeviceTransportTypeBluetooth || t == kAudioDeviceTransportTypeBluetoothLE,
-                         // The aggregate macOS makes for echo cancellation is no microphone of its own.
-                         virtual: d.isVirtualMic || d.uid.hasPrefix("CADefaultDeviceAggregate"))
+            return (d, .init(uid: d.uid, builtIn: t == kAudioDeviceTransportTypeBuiltIn,
+                             bluetooth: t == kAudioDeviceTransportTypeBluetooth || t == kAudioDeviceTransportTypeBluetoothLE,
+                             // The aggregate macOS makes for echo cancellation is no microphone of its own.
+                             virtual: d.isVirtualMic || d.uid.hasPrefix("CADefaultDeviceAggregate")))
         }
-        let uid = RoomMicPlan.pick(defaultUID: defaultInput?.uid, inputs: plan, preferredUID: preferredUID)
-        return all.first { $0.uid == uid }
     }
 }
 

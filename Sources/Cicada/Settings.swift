@@ -217,7 +217,7 @@ final class AppSettings: ObservableObject {
     @Published var listenSource: String {
         didSet { save() }
     }
-    /// Meeting input UID; empty keeps automatic selection. Does not change the system default.
+    /// The microphone chosen beside 打开麦克风, by UID; empty is 自动. Never the system default's.
     @Published var roomMicUID: String {
         didSet { save() }
     }

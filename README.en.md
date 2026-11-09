@@ -58,7 +58,7 @@ Cicada detects the spoken language within seconds and translates it into your sy
 
 ### In-person and hybrid meetings
 
-In a meeting room, click **Turn on mic** to listen to people around the table. Hybrid meetings use the exact same button: computer audio is marked **Online** and microphone audio is marked **In room**, combined in a single record (on macOS 14 and 15, turning on the mic listens only to the table). When speaker audio bleeds into the microphone, Cicada automatically ducks and deduplicates it so nothing is recorded twice; with headphones on, both sides can talk at once and both are kept. Windows and Linux follow the same rules.
+In a meeting room, click **Turn on mic** to listen to people around the table. Hybrid meetings use the exact same button: computer audio is marked **Online** and microphone audio is marked **In room**, combined in a single record (on macOS 14 and 15, turning on the mic listens only to the table). When speaker audio bleeds into the microphone, Cicada automatically ducks and deduplicates it so nothing is recorded twice; with headphones on, both sides can talk at once and both are kept. Windows and Linux follow the same rules. On the Mac, the small arrow beside the button picks which microphone hears the room (an iPhone or a conference mic, say) without changing the system default.
 
 ### Simultaneous interpreting
 
@@ -177,7 +177,3 @@ See [AGENTS.md](AGENTS.md) for code architecture. The website source is in `site
 ## License
 
 This project is licensed under [Apache-2.0](LICENSE). The BlackHole 2ch virtual microphone driver is licensed under the GPL; it is not bundled in the installer and is downloaded from its official URL when you click install. The bundled voiceprint model is [WeSpeaker](https://github.com/wenet-e2e/wespeaker)'s ResNet34-LM trained on VoxCeleb (CC BY 4.0), converted to Core ML by `scripts/convert-voiceprint.py`.
-
-## Meeting audio input
-
-Choose a meeting input in Settings → General: an iPhone Continuity microphone, AirPods, or another physical input exposed by macOS. This does not change the system default. Turn the meeting microphone off before switching. Automatic mode still favors room microphones; disconnected inputs use the existing fallback and notice. Continuity requires Apple's supported devices/account/network setup. AirPods primarily capture the wearer's voice.

@@ -447,7 +447,8 @@ extension MenuPanelView {
 
 /// 打开麦克风 / 关闭麦克风, the same switch in the panel and the notes window. In the panel it is
 /// the dark button while off (the thing to do) and a quiet one while on; in the notes window's
-/// header it sits beside 结束 like it, tinted while the microphone is on.
+/// header it sits beside 结束 like it, tinted while the microphone is on. Its chevron picks the
+/// microphone, where the user is when the room sounds wrong rather than in Settings.
 struct MicButton: View {
     @ObservedObject var model: AppModel
     @ObservedObject var settings: AppSettings
@@ -455,22 +456,58 @@ struct MicButton: View {
 
     var body: some View {
         let on = model.micOn
-        Button { model.setMic(!on) } label: {
-            HStack(spacing: 5) {
-                Image(systemName: on ? "mic.fill" : "mic")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(on ? Palette.accent : (inHeader ? Palette.ink : Color.white))
-                Text(on ? L("关闭麦克风") : L("打开麦克风")).font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(!on && !inHeader ? Color.white : Palette.ink)
-                    .lineLimit(1).fixedSize()
+        HStack(spacing: 0) {
+            Button { model.setMic(!on) } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: on ? "mic.fill" : "mic")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(on ? Palette.accent : (inHeader ? Palette.ink : Color.white))
+                    Text(on ? L("关闭麦克风") : L("打开麦克风")).font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ink(on))
+                        .lineLimit(1).fixedSize()
+                }
+                .padding(.leading, inHeader ? 10 : 12).padding(.trailing, 7).frame(height: 28)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, inHeader ? 10 : 12).frame(height: 28)
-            .background(RoundedRectangle(cornerRadius: 7).fill(background(on)))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(border(on), lineWidth: 1))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel(on ? L("关闭麦克风") : L("打开麦克风"))
+            Rectangle().fill(divider(on)).frame(width: 1, height: 14)
+            chooser(on)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(on ? L("关闭麦克风") : L("打开麦克风"))
+        .background(RoundedRectangle(cornerRadius: 7).fill(background(on)))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(border(on), lineWidth: 1))
+    }
+
+    /// The room's microphones, with 自动 first naming the one it would take. A chosen one that is
+    /// unplugged shows as 自动 until it is back.
+    private func chooser(_ on: Bool) -> some View {
+        let choices = AudioDevices.roomMicChoices()
+        let chosen = choices.contains { $0.device.uid == settings.roomMicUID } ? settings.roomMicUID : ""
+        let auto = AudioDevices.roomMic()?.name
+        return Menu {
+            Picker(L("会议室用哪个麦克风"), selection: Binding(get: { chosen }, set: { model.setRoomMic($0) })) {
+                Text(auto.map { L("自动（\($0)）") } ?? L("自动")).tag("")
+                ForEach(choices, id: \.device.uid) { c in
+                    // A headset hears its wearer, not the table: fine for your own notes, so say it.
+                    Text(c.bluetooth ? L("\(c.device.name)（只听得到戴的人）") : c.device.name).tag(c.device.uid)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+                .foregroundStyle(ink(on).opacity(0.75))
+                .frame(width: 24, height: 28).contentShape(Rectangle())
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        .accessibilityLabel(L("选择麦克风"))
+        .help(L("选择麦克风"))
+    }
+
+    private func ink(_ on: Bool) -> Color { !on && !inHeader ? Color.white : Palette.ink }
+
+    private func divider(_ on: Bool) -> Color {
+        if inHeader { return on ? Palette.accent.opacity(0.25) : Palette.line }
+        return on ? Palette.line : Color.white.opacity(0.25)
     }
 
     private func background(_ on: Bool) -> Color {

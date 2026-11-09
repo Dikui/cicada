@@ -1395,3 +1395,8 @@
 "关掉后只在菜单栏，打开窗口时才出现" = "Off: menu bar only, in the Dock just while a window is open";
 "密码：%@" = "Password: %@";
 "复制" = "Copy";
+
+/* Mic button: the chevron that picks the room's microphone */
+"选择麦克风" = "Choose microphone";
+"会议室用哪个麦克风" = "Microphone for the room";
+"%@（只听得到戴的人）" = "%@ (hears only the wearer)";

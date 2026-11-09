@@ -901,11 +901,18 @@ final class AppModel: ObservableObject {
     /// Not kept for the next launch: listening starts by itself, never with the microphone open.
     var micOn: Bool { settings.hearsRoom }
 
-    /// The actual pinned live input, rather than a saved preference that may be disconnected.
-    var activeMeetingInputName: String? {
+    /// The menu beside 打开麦克风: which microphone hears the room ("" = 自动, as `RoomMicPlan` picks).
+    /// Picking one while the microphone is off is asking to hear the room with it; while it is on,
+    /// only the room side reconnects, and the meeting goes on.
+    func setRoomMic(_ uid: String) {
+        settings.roomMicUID = uid
+        debugLog("room mic chosen: \(uid.isEmpty ? "auto" : uid)")
+        guard micOn else { setMic(true); return }
         let engine = settings.hearsBoth ? roomListen : listen
-        guard settings.hearsRoom, engine.isRunning, let uid = engine.roomMicUID else { return nil }
-        return AudioDevices.inputs().first { $0.uid == uid }?.name
+        if engine.isRunning, engine.roomMicUID != AudioDevices.roomMic(excluding: fakeGoneMics, preferredUID: uid)?.uid {
+            engine.reconnectAudio()
+        }
+        objectWillChange.send()
     }
 
     func setMic(_ on: Bool) {
@@ -1806,6 +1813,9 @@ final class AppModel: ObservableObject {
         case "roomMicSilent":
             // roomMicSilent:<on|off>: the room mic delivers nothing but zeros (from its next start).
             RoomMic.simulateSilence = arg != "off"
+        case "roomMic":
+            // roomMic:<uid|auto>: the menu beside 打开麦克风.
+            setRoomMic(arg == "auto" ? "" : arg)
         case "roomMicGone":
             // roomMicGone[:none]: pretend the room's microphone (or every one) was unplugged.
             let uid = (settings.hearsBoth ? roomListen : listen).roomMicUID
