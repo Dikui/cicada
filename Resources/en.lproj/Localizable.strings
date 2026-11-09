@@ -1400,3 +1400,16 @@
 "选择麦克风" = "Choose microphone";
 "会议室用哪个麦克风" = "Microphone for the room";
 "%@（只听得到戴的人）" = "%@ (hears only the wearer)";
+
+/* iOS: 声音来源, interruptions, picture-in-picture subtitles */
+"声音来源" = "Audio source";
+"手机外放" = "Phone speaker";
+"外放" = "Speaker";
+"外放 · %@" = "Speaker · %@";
+"别戴耳机，字幕会浮在小窗里" = "No headphones; subtitles float in a small window";
+"听不到其他 app 的声音，线上会议请用电脑版" = "Can't hear other apps; use a computer for online meetings";
+"已暂停，结束后接着听" = "Paused; resumes when it's over";
+"继续听" = "Listening again";
+"正在听外放…" = "Listening to the speaker…";
+"知了 · 正在听" = "Cicada · Listening";
+"没听到声音，请拔掉耳机或调大音量" = "No sound; unplug headphones or turn it up";
