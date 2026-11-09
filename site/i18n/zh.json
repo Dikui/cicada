@@ -68,17 +68,20 @@
   "speak_hold": "按住 <kbd>右 ⌥</kbd> 说中文，对方听到英文",
   "works": "这些 app 里都能用，只要电脑能出声就行",
   "apps": [
+    "腾讯会议",
+    "飞书",
+    "钉钉",
+    "企业微信",
     "Zoom",
     "Microsoft Teams",
-    "飞书",
-    "腾讯会议",
     "Google Meet",
+    "Webex",
     "X Spaces",
+    "Discord",
+    "Telegram",
     "YouTube 直播",
     "Twitch",
-    "Discord",
     "B 站直播",
-    "钉钉",
     "播客"
   ],
   "why_h": "飞书、Teams 自带字幕？<br><span class=\"strike\">出了自家 app 就没辙了</span>",
@@ -119,7 +122,7 @@
   "sp_s2": "你说",
   "sp_s3": "松手即译",
   "sp_s4": "说进会议",
-  "sp_s4_p": "走虚拟麦克风 BlackHole 2ch，Zoom、腾讯会议、飞书都能听到。",
+  "sp_s4_p": "走虚拟麦克风 BlackHole 2ch，Zoom、Teams、腾讯会议、飞书都能听到。",
   "sp_key": "右 ⌥",
   "sp_listen": "听一段",
   "rec_h": "散会即成纪要，句句可查原话",
@@ -278,6 +281,10 @@
     [
       "Windows、Linux、手机能用吗？",
       "Windows 10（2004）以上、Ubuntu 22.04 / 24.04 桌面版和 Android 10 以上都能用，会议记录和 Mac 通用。这几个版本听对方也交给 AI 服务，要接上 Ling、OpenRouter、ZenMux 或自建服务；Windows 和 Linux 也能听会议室。Linux 上纪要窗会被屏幕共享看到，Android 只能面对面外放译文。iPhone 版准备中。"
+    ],
+    [
+      "支持 Teams、钉钉、Google Meet 吗？",
+      "电脑上能放出声音的都支持：腾讯会议、飞书、钉钉、企业微信、Zoom、Teams、Google Meet、Webex、Discord、Telegram，网页版会议也行，看直播、听播客也一样。要用同声传译，在会议 app 或浏览器里把麦克风选成虚拟麦克风就行（Mac 选 BlackHole 2ch，Windows 选 VB-Cable，Linux 选“知了 麦克风”）。手机上系统不让录会议和通话 app 的声音，要开外放，在知了里选“面对面”听；普通视频和直播可以直接听。"
     ],
     [
       "要花钱吗？",

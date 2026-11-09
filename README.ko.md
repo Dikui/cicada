@@ -25,7 +25,9 @@
 
 <p align="center"><a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a></p>
 
-Zoom, Feishu, Tencent Meeting 회의나 X Spaces, YouTube 라이브 방송을 들을 때 실시간 이중 언어 자막과 체계적인 회의록을 보여줍니다. 발언 차례가 되면 말하기 키(Mac은 오른쪽 `⌥`, Windows는 오른쪽 `Ctrl`)를 누른 채 말하면 상대방이 회의에서 바로 번역된 음성을 듣습니다. 시스템 소리를 직접 읽기 때문에 회의에 봇을 넣지 않아 상대방은 전혀 눈치채지 못합니다. Apple silicon Mac에서는 음성 인식이 모두 기기 안에서 이루어져 소리가 컴퓨터 밖으로 나가지 않습니다.
+Zoom, Teams, Feishu, Tencent Meeting 회의나 X Spaces, YouTube 라이브 방송을 들을 때 실시간 이중 언어 자막과 체계적인 회의록을 보여줍니다. 발언 차례가 되면 말하기 키(Mac은 오른쪽 `⌥`, Windows는 오른쪽 `Ctrl`)를 누른 채 말하면 상대방이 회의에서 바로 번역된 음성을 듣습니다. 시스템 소리를 직접 읽기 때문에 회의에 봇을 넣지 않아 상대방은 전혀 눈치채지 못합니다. Apple silicon Mac에서는 음성 인식이 모두 기기 안에서 이루어져 소리가 컴퓨터 밖으로 나가지 않습니다.
+
+**사용 가능한 곳**: 컴퓨터에서 소리가 나는 모든 곳에서 쓸 수 있습니다. Tencent Meeting, Feishu, DingTalk, WeCom, Zoom, Teams, Google Meet, Webex, Discord, Telegram 음성 채팅은 물론 X Spaces, YouTube, Twitch, Bilibili Live, 팟캐스트 및 웹 브라우저 회의도 지원합니다. 스마트폰에서는 시스템 제한으로 회의 및 통화 앱의 소리를 직접 녹음할 수 없으므로, 스피커폰을 켜고 '대면' 모드를 사용하세요.
 
 <p align="center">
   <img src="docs/demo.gif" width="800" alt="YouTube에서 재생 중인 Bloomberg 영어 라이브 방송과 오른쪽의 Cicada 실시간 회의록, 안건, 피시본 다이어그램, 하단의 이중 언어 자막">

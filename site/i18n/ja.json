@@ -66,20 +66,23 @@
   "n_todo": "ToDo",
   "n_todo_text": "金曜までにデザイン承認",
   "speak_hold": "<kbd>右 ⌥</kbd> で日本語で話すと、相手には英語で",
-  "works": "パソコンから音が出れば、これらのアプリすべてで使えます",
+  "works": "パソコンから音が出れば、どのアプリでも使えます",
   "apps": [
+    "Tencent Meeting",
+    "Lark",
+    "DingTalk",
+    "WeCom",
     "Zoom",
     "Microsoft Teams",
     "Google Meet",
     "Webex",
-    "X スペース",
+    "X Spaces",
+    "Discord",
+    "Telegram",
     "YouTube ライブ",
     "Twitch",
-    "Discord",
-    "Slack ハドル",
-    "Lark",
-    "ポッドキャスト",
-    "ウェビナー"
+    "Bilibili Live",
+    "ポッドキャスト"
   ],
   "why_h": "Teams や Meet にも字幕がある？<br><span class=\"strike\">それぞれのアプリの中だけです。</span>",
   "why_lead": "X スペース、YouTube ライブ、Discord、ポッドキャストでは使えません。Cicada はパソコンで再生される音を直接聞き取り、マイクで対面の会議室も聞き取れます。会議にボットを入れる必要も、相手が何かをインストールする必要もありません。",
@@ -119,7 +122,7 @@
   "sp_s2": "あなたの発言",
   "sp_s3": "離すと翻訳",
   "sp_s4": "会議に流れる",
-  "sp_s4_p": "仮想マイク BlackHole 2ch 経由なので、Zoom や Teams にそのまま届きます。",
+  "sp_s4_p": "仮想マイクのBlackHole 2chを経由するため、Zoom、Teams、Tencent Meeting、Larkの相手にそのまま聞こえます。",
   "sp_key": "右 ⌥",
   "sp_listen": "音声で聞く",
   "rec_h": "会議のあとに、見返せる記録が残る",
@@ -278,6 +281,10 @@
     [
       "Windows・Linux・スマートフォンでも使えますか？",
       "Windows 10（2004）以降、Ubuntu 22.04 / 24.04 デスクトップ、Android 10 以降で使え、会議の記録は Mac と共通です。これらは相手の音声の認識も AI サービスに任せるため、Ling、OpenRouter、ZenMux、または自分のサービスへの接続が必須です。Windows と Linux は会議室も聞き取れます。Linux では議事メモのウィンドウが画面共有に映り、Android の同時通訳は対面でスピーカーから流すだけです。iPhone 版は準備中です。"
+    ],
+    [
+      "Teams、DingTalk、Google Meetには対応していますか？",
+      "パソコンから音が出るものはすべて対応しています。Tencent Meeting、Lark、DingTalk、WeCom、Zoom、Teams、Google Meet、Webex、Discord、Telegramのほか、ブラウザでの会議、ライブ配信、ポッドキャストでもそのまま使えます。同時通訳を使う場合は、会議アプリまたはブラウザのマイク設定で仮想マイク（Macは「BlackHole 2ch」、Windowsは「VB-Cable」、Linuxは「知了 マイク」）を選択してください。スマートフォンでは、OSの制限により会議や通話アプリの音声を直接録音できないため、スピーカーフォンにしてCicadaで「対面」を選択してください。通常の動画やライブ配信はそのまま聞き取れます。"
     ],
     [
       "料金はかかりますか？",

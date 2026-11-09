@@ -66,19 +66,22 @@
   "n_todo": "To-do",
   "n_todo_text": "Design signs off by Fri",
   "speak_hold": "Hold <kbd>right ⌥</kbd>: speak English, they hear Chinese",
-  "works": "Works in all of these, as long as your computer plays the sound",
+  "works": "Works with all of these—if your computer can play the sound, Cicada works with it",
   "apps": [
+    "Tencent Meeting",
+    "Lark",
+    "DingTalk",
+    "WeCom",
     "Zoom",
     "Microsoft Teams",
     "Google Meet",
-    "Lark",
-    "Tencent Meeting",
+    "Webex",
     "X Spaces",
+    "Discord",
+    "Telegram",
     "YouTube Live",
     "Twitch",
-    "Discord",
-    "Webex",
-    "DingTalk",
+    "Bilibili Live",
     "Podcasts"
   ],
   "why_h": "Teams and Meet have captions?<br><span class=\"strike\">Only inside their own apps.</span>",
@@ -119,7 +122,7 @@
   "sp_s2": "You say",
   "sp_s3": "Let go, it translates",
   "sp_s4": "Into the meeting",
-  "sp_s4_p": "Through the BlackHole 2ch virtual mic, so Zoom, Teams or Lark hear it.",
+  "sp_s4_p": "Routed through the BlackHole 2ch virtual microphone, so everyone on Zoom, Teams, Tencent Meeting, or Lark can hear it.",
   "sp_key": "right ⌥",
   "sp_listen": "Listen",
   "rec_h": "After the meeting, a record you can go back to",
@@ -278,6 +281,10 @@
     [
       "What about Windows, Linux and phones?",
       "Windows 10 (2004) or later, the Ubuntu 22.04 / 24.04 desktop and Android 10 or later are all supported, with the same meeting records as the Mac. These apps also hand listening to the AI service, so they need Ling, OpenRouter, ZenMux or your own server; Windows and Linux can listen to the room too. On Linux the notes window shows up in screen sharing; on Android, interpreting is face to face through the speaker. The iPhone app is on its way."
+    ],
+    [
+      "Does it work with Teams, DingTalk, or Google Meet?",
+      "If your computer can play the audio, Cicada supports it. That includes Tencent Meeting, Lark, DingTalk, WeCom, Zoom, Teams, Google Meet, Webex, Discord, and Telegram—plus browser-based meetings, livestreams, and podcasts. For live interpretation, set the microphone in your meeting app or browser to the virtual microphone (BlackHole 2ch on Mac, VB-Cable on Windows, or Cicada Microphone on Linux). On Android, the system blocks recording audio from meeting and call apps, so you need to put the call on speaker and select In person in Cicada. Regular videos and livestreams on your phone work directly."
     ],
     [
       "Does it cost anything?",

@@ -25,7 +25,9 @@
 
 <p align="center"><a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a></p>
 
-Zoom、Feishu、Tencent Meeting の会議でも、X スペースや YouTube のライブ配信でも、Cicada はリアルタイムの二か国語字幕を出しながら、構造化された議事メモを書き進めます。発言するときは、話すキー（Mac は右の `⌥`、Windows は右の `Ctrl`）を押したまま話せば、翻訳された音声がそのまま会議の相手に届きます。システムの音声を直接読み取るため、会議にボットを入れる必要はなく、相手には気づかれません。Apple シリコンの Mac ではすべて端末内で認識するため、音声が外に出ることはありません。
+Zoom、Teams、Feishu、Tencent Meeting の会議でも、X スペースや YouTube のライブ配信でも、Cicada はリアルタイムの二か国語字幕を出しながら、構造化された議事メモを書き進めます。発言するときは、話すキー（Mac は右の `⌥`、Windows は右の `Ctrl`）を押したまま話せば、翻訳された音声がそのまま会議の相手に届きます。システムの音声を直接読み取るため、会議にボットを入れる必要はなく、相手には気づかれません。Apple シリコンの Mac ではすべて端末内で認識するため、音声が外に出ることはありません。
+
+**使える場所**：パソコンから音が出るものなら何でも使えます。Tencent Meeting、Feishu、DingTalk、WeCom、Zoom、Teams、Google Meet、Webex、Discord、Telegramの音声通話、X Spaces、YouTube、Twitch、Bilibili Live、ポッドキャストのほか、ブラウザ版の会議にも対応しています。スマートフォンでは、OSの制限により会議アプリや通話アプリの音声を直接録音できないため、スピーカーフォンにして「対面」モードをお使いください。
 
 <p align="center">
   <img src="docs/demo.gif" width="800" alt="YouTube の Bloomberg の英語のライブ配信。右側に Cicada のリアルタイムの中国語のメモ、トピック、フィッシュボーン図、下部に二か国語の字幕が表示されています">
