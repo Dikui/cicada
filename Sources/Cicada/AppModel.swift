@@ -80,15 +80,16 @@ final class AppModel: ObservableObject {
     /// 继续等 was chosen: the offer stays away until the next meeting.
     private var cloudDeclined = false
     @Published private(set) var identifyingLanguage = false
-    /// 电脑和会议室 with the microphone not allowed: the Mac's side goes on, the room's can't start.
-    @Published var hybridMicDenied = false
+    /// 电脑和会议室 with the microphone not allowed (since when): the Mac's side goes on, the room's can't start.
+    @Published private(set) var micDeniedSince: Date?
+    var hybridMicDenied: Bool { micDeniedSince != nil }
     /// Debug (`micDeniedSim`): 电脑和会议室 acts as if the microphone were refused.
     private var fakeMicDenied = false
     /// Something only you can fix, said beyond the panel (shut while you meet): the menu bar's dot
     /// and its tooltip. The microphone also goes to the notes window, the subtitle bar and, once a
     /// meeting, a notification.
     @Published private(set) var problem: String?
-    private var micDeniedSince: Date?
+    /// The notification went out: once a meeting, however often the microphone is refused again.
     private var micDeniedNotified = false
     /// 麦克风没声音: the room mic stayed digital silence after being opened again.
     @Published private(set) var roomMicSilent = false
@@ -570,7 +571,6 @@ final class AppModel: ObservableObject {
         let both = listen.isRunning && settings.hearsBoth && !Recognition.legacy
         let denied = both && (fakeMicDenied || [.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .audio)))
         if denied != hybridMicDenied {
-            hybridMicDenied = denied
             micDeniedSince = denied ? Date() : nil
             overlay.setAlert(denied ? L("听不到会议室 · 麦克风没允许") : nil)
         }
