@@ -86,18 +86,23 @@ final class ListenEngine {
         return (d.lang, d.since, fetchingModel?.lang == d.lang)
     }
 
-    /// 先用○○听: the AI service hears the meeting while the model it needs downloads (`CloudStream`).
-    private(set) var cloudListening = false
-    /// What listening was before, restored by 换回等待.
-    private var cloudReplaced: (lang: Lang?, confirmed: Bool)?
-    /// The model being waited for: once it is on the Mac, listening goes back to it.
-    private var cloudAwaiting: Lang?
-    /// The language the service says is spoken.
-    private var cloudLang: Lang?
-    private var cloudFailures = 0
-    /// Who was hearing the meeting when it went to a service, and whether it was the user's own
-    /// recognition server (rather than 先用○○听): a change in settings must not move the audio elsewhere.
-    private var cloudVia: (provider: AIProvider.Kind?, server: Bool)?
+    /// A service hearing the meeting (`CloudStream`): 先用○○听 while the model it needs downloads,
+    /// or the user's own recognition server.
+    private struct CloudSession {
+        /// What listening was before, restored by 换回等待.
+        var replaced: (lang: Lang?, confirmed: Bool)
+        /// The model being waited for: once it is on the Mac, listening goes back to it.
+        let awaiting: Lang?
+        /// Who was hearing the meeting when it went to a service, and whether it was the user's own
+        /// recognition server (rather than 先用○○听): a change in settings must not move the audio elsewhere.
+        let via: (provider: AIProvider.Kind?, server: Bool)
+        /// The language the service says is spoken.
+        var lang: Lang?
+        var failures = 0
+    }
+    /// nil while this Mac listens.
+    private var cloud: CloudSession?
+    var cloudListening: Bool { cloud != nil }
     /// The user's own service stopped answering in this meeting: listening went back to this Mac.
     private var serverFellBack = false
     /// The meeting is recognized by the user's own service (`Recognition.serverPreferred`).
@@ -362,7 +367,7 @@ final class ListenEngine {
         askShown = false
         fetchFailed = []
         modelProblem = nil
-        resetCloud()
+        cloud = nil
         cloudBack = nil
         serverFellBack = false
         startedAt = Date()
@@ -415,7 +420,7 @@ final class ListenEngine {
         heardSpeech = isRunning && (router.stats().voicedTotal >= 3 || firstHeardAt != nil)
         isRunning = false
         generation += 1
-        resetCloud()
+        cloud = nil
         cloudBack = nil
         tickTimer?.invalidate()
         tickTimer = nil
@@ -665,7 +670,7 @@ final class ListenEngine {
             return
         }
         if cloudListening { debugLog("cloud: off, \(lang.locale) on this Mac") }
-        resetCloud()
+        cloud = nil
         generation += 1
         let gen = generation
         router.detach()
@@ -1168,12 +1173,7 @@ final class ListenEngine {
             recognizer = nil
             Task { await old.cancel() }
         }
-        cloudListening = true
-        cloudVia = (translator.ling.provider.id, serverHears)
-        cloudReplaced = replaced
-        cloudAwaiting = awaiting
-        cloudLang = nil
-        cloudFailures = 0
+        cloud = CloudSession(replaced: replaced, awaiting: awaiting, via: (translator.ling.provider.id, serverHears))
         unconfirmed = []
         segments.removeAll()
         volatileText = ""
@@ -1197,20 +1197,20 @@ final class ListenEngine {
                     try await Task.sleep(for: .seconds(1))
                     heard = try await translator.hear(wav: wav, seconds: seconds, target: self.resolvedTarget, hint: self.cloudHint)
                 }
-                if self.cloudFailures >= 3 { self.setStatus(L("\(self.cloudService ?? "AI") 在听")) }
-                self.cloudFailures = 0
+                if (self.cloud?.failures ?? 0) >= 3 { self.setStatus(L("\(self.cloudService ?? "AI") 在听")) }
+                self.cloud?.failures = 0
                 return heard
             } catch {
-                guard gen == self.generation, self.cloudListening, !(error is CancellationError) else { return nil }
+                guard gen == self.generation, self.cloud != nil, !(error is CancellationError) else { return nil }
                 debugLog("cloud: hear failed: \(error)")
-                self.cloudFailures += 1
+                self.cloud?.failures += 1
                 // The service is down or the key stopped working: listening shouldn't go quiet with it.
-                if self.cloudFailures >= 3 {
+                if (self.cloud?.failures ?? 0) >= 3 {
                     if self.serverHears, !Recognition.cloudOnly {
                         // The user's own service is down: this Mac recognizes the rest of the meeting.
                         debugLog("cloud: own service failed 3 times, back to this Mac for this meeting")
                         self.serverFellBack = true
-                        if self.cloudReplaced?.lang == nil { self.cloudReplaced = (self.activeLang, false) }
+                        if self.cloud?.replaced.lang == nil { self.cloud?.replaced = (self.activeLang, false) }
                         self.stopCloud()
                         self.setStatus(L("\(self.cloudService ?? "AI") 连不上 · 字幕改用本机识别"))
                     } else if !Recognition.cloudOnly { self.stopCloud() }
@@ -1234,13 +1234,12 @@ final class ListenEngine {
 
     /// 换回等待 (or the service failing): back to what listened before, the download carrying on.
     func stopCloud() {
-        guard cloudListening, !Recognition.cloudOnly else { return }
-        let back = cloudReplaced
-        let lang = back?.lang ?? activeLang
+        guard let back = cloud?.replaced, !Recognition.cloudOnly else { return }
+        let lang = back.lang ?? activeLang
         debugLog("cloud: off, back to \(lang?.locale ?? "nothing")")
-        resetCloud()
+        cloud = nil
         generation += 1
-        detection.setConfirmed(back?.confirmed ?? false)
+        detection.setConfirmed(back.confirmed)
         updateHold()
         onStateChange?()
         guard let lang else { return }
@@ -1251,34 +1250,28 @@ final class ListenEngine {
     /// it went to: another service (Ling chosen instead of a custom one), or 语音识别 set back to
     /// 本机, takes the meeting back to this Mac rather than sending its audio to a service nobody chose.
     func aiServiceChanged() {
-        guard cloudListening, let via = cloudVia else { return }
+        guard let via = cloud?.via else { return }
         let provider = translator?.ling.provider.id
         guard provider != via.provider || (via.server && !Recognition.serverPreferred) else { return }
         debugLog("cloud: the AI service changed (\(via.provider?.rawValue ?? "?") → \(provider?.rawValue ?? "?")), back to this Mac")
         stopCloud()
     }
 
-    private func resetCloud() {
-        cloudVia = nil
-        cloudListening = false
-        cloudReplaced = nil
-        cloudAwaiting = nil
-        cloudLang = nil
-        cloudFailures = 0
-    }
 
     /// The language the meeting has been in, which keeps Ming from flipping on a short stretch.
     private var cloudHint: String? {
         if case .fixed(let lang) = settings.sourceMode { return lang.code }
-        return cloudLang?.code ?? (cloudReplaced?.confirmed == true ? cloudReplaced?.lang?.code : nil)
+        guard let cloud else { return nil }
+        return cloud.lang?.code ?? (cloud.replaced.confirmed ? cloud.replaced.lang?.code : nil)
     }
 
     /// The service said which language a line was in: it answers what detection would have.
     private func cloudHeard(_ code: String) {
         guard let lang = sourceLanguages.first(where: { $0.code == code })
                 ?? sourceLanguages.first(where: { code.hasPrefix("zh") && $0.code.hasPrefix("zh") }) else { return }
-        if cloudLang != lang { debugLog("cloud: heard \(lang.locale)") }
-        cloudLang = lang
+        guard cloud != nil else { return }
+        if cloud?.lang != lang { debugLog("cloud: heard \(lang.locale)") }
+        cloud?.lang = lang
         if settings.sourceMode == .auto, activeLang != lang {
             activeLang = lang
             if role == .main { UserDefaults.standard.set(lang.locale, forKey: "lastDetected") }
@@ -1289,11 +1282,11 @@ final class ListenEngine {
     private func cloudModelArrived() {
         // The user chose their service: a model arriving is only the fallback getting ready.
         guard !serverHears else { return }
-        guard let awaiting = cloudAwaiting, installedLocales.contains(awaiting.locale) else { return }
+        guard let awaiting = cloud?.awaiting, installedLocales.contains(awaiting.locale) else { return }
         let want: Lang
         if case .fixed(let lang) = settings.sourceMode {
             want = lang
-        } else if let heard = cloudLang, installedLocales.contains(heard.locale) {
+        } else if let heard = cloud?.lang, installedLocales.contains(heard.locale) {
             want = heard
         } else {
             want = awaiting
@@ -1302,8 +1295,8 @@ final class ListenEngine {
         debugLog("cloud: \(awaiting.locale) is on the Mac, back to \(want.locale) here")
         cloudBack = (cloudService ?? "AI", Date())
         // What the service heard settles the language; without a line from it, detection still decides.
-        let confirmed = cloudLang == want
-        resetCloud()
+        let confirmed = cloud?.lang == want
+        cloud = nil
         generation += 1
         detection.setConfirmed(confirmed)
         updateHold()
