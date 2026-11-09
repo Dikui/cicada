@@ -24,7 +24,7 @@ from cicada.core import jsonfmt, strings, support  # noqa: E402
 from cicada.core.audio import PcmAudioSource, Wav  # noqa: E402
 from cicada.core.ling import AUDIO_MODEL, INVALID, NOTES, TRANSLATE, AIKey, LingClient, LingError, Response  # noqa: E402
 from cicada.core.listen import ListenEngine, continues, join  # noqa: E402
-from cicada.core.models import Fishbone, FishboneBranch, MeetingNotes, NoteItem, NoteTerm, NoteTopic, Session, TranscriptLine  # noqa: E402
+from cicada.core.models import Fishbone, FishboneBranch, LineFix, MeetingNotes, NoteItem, NoteTerm, NoteTopic, Session, TranscriptLine  # noqa: E402
 from cicada.core import notes as notesmod  # noqa: E402
 from cicada.core.notes import NotesEngine  # noqa: E402
 from cicada.core.segmenter import Segmenter  # noqa: E402
@@ -652,6 +652,14 @@ class Notes(Base):
         self.assertEqual(["Strip"], n.terms[0].heard)
         self.assertIsNone(notesmod.parse("not json", [], 0.0))
         self.assertIsNone(notesmod.parse("{}", [], 0.0))
+
+    def test_terms_keep_only_forms_the_recognizer_wrote(self):
+        """A heard form only a fix wrote ("platform" for 平台) isn't one: it would teach the translator
+        and the next fix the same mistake."""
+        l = TranscriptLine(id="a", t=0, speaker="them", src="我们 twoty 平台", dst=None, srcLang="zh-CN", dstLang="en")
+        l.fixes = [LineFix("平台", "platform")]
+        terms = [NoteTerm(name="X平台", note="n", heard=["Xplatform", "platform", "Twoty"])]
+        self.assertEqual(["Twoty"], notesmod.heard_as_said(terms, [l])[0].heard)
 
     def test_keeps_earliest_times(self):
         old = MeetingNotes(topics=[NoteTopic(title="t", points=["a"], pointTimes=[3.0])], todos=[NoteItem(text="x", t=2.0)])

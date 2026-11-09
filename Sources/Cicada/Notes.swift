@@ -319,6 +319,7 @@ final class NotesEngine: ObservableObject {
             }
             if !final, !fresh { next.topics = Self.merge(base.topics, frozen: frozen, returned: next.topics) }
             if !fresh { next.terms = NoteTerm.keepingOrder((id == shownID ? notes : session.notes)?.terms ?? [], next.terms) }
+            next.terms = Self.heardAsSaid(next.terms, lines: lines)
             Self.carryTimes(from: base, into: &next)
             // A reply without a name keeps the last one (not after a language change).
             if next.title == nil, !fresh { next.title = (id == shownID ? notes : session.notes)?.title }
@@ -450,6 +451,17 @@ final class NotesEngine: ObservableObject {
                          pointTimes: times.contains { $0 != nil } ? times : nil)
     }
 
+    /// Terms keep only the heard forms the recognizer really wrote (`src`). The notes read lines
+    /// with fixes in, so a wrong fix came back as a heard form ("X平台 heard as platform"), went to
+    /// the translator and the next fix's request as a known mishearing, and was proposed again.
+    static func heardAsSaid(_ terms: [NoteTerm], lines: [TranscriptLine]) -> [NoteTerm] {
+        terms.map { t in
+            var t = t
+            t.heard = t.heard.filter { h in lines.contains { $0.src.localizedCaseInsensitiveContains(h) } }
+            return t
+        }
+    }
+
     /// A runaway topic summary cut back to its first sentence (or to the limit, with "…").
     static func shortened(_ summary: String) -> String {
         guard summary.count > topicSummaryLimit else { return summary }
@@ -563,7 +575,7 @@ final class NotesEngine: ObservableObject {
         - At most 5 conclusions and only real to-dos (often none).
         - Add a fishbone only to a topic that discusses causes, reasons or factors (3-5 branches); otherwise null.
         - Every topic, point, branch, conclusion and to-do needs evidence: the ids of the lines that say it. Never state anything the transcript does not say.
-        - terms: at most 10 in total, replacing less useful ones rather than adding: first names the transcript misspells (heard), then the people, places and jargon a reader would not know. Leave out what everyone knows (a famous company, index or politician) unless it was misheard. name is the correct spelling in the transcript's language (no translation in brackets); heard lists only the wrong forms the transcript used; note is a few words.
+        - terms: at most 10 in total, replacing less useful ones rather than adding: first names the transcript misspells (heard), then the people, places and jargon a reader would not know. Leave out what everyone knows (a famous company, index or politician) unless it was misheard. name is the correct spelling in the transcript's language (no translation in brackets); heard lists only the wrong forms the transcript used, and only of that same thing: a name said again and again in one spelling that context doesn't tie to a known one ("我们 twoty", "our platform") is a thing of its own, its own term with that spelling, not a mishearing of a similar name; note is a few words.
         - Write the meeting title and every summary, title, point, branch, conclusion and to-do in \(language), even when the transcript is in another language. Only term names keep the transcript's spelling.
         - Write about what was said, never about the transcript or recognition quality.
         - Use empty arrays when there is nothing. No markdown, no text outside the JSON.
