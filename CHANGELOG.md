@@ -5,6 +5,50 @@ writes it from the `feat:` and `fix:` commits since the last tag, grouped by pla
 scope), and the release workflow publishes it as the release notes. Since 1.1.2 every release ships
 every platform (one with nothing new says No changes); earlier ones shipped only those listed. Lines under `## Unreleased` become the release's summary. The Chinese changelog for users is `site/changelog.json`.
 
+## 1.7.0 — 2026-11-08
+
+### Mac
+
+#### New
+
+- Cicada stays in the Dock while it runs, with an orange dot while recording and a right-click menu ([308f00c](https://github.com/wquguru/cicada/commit/308f00c27dfe008f3ccea3dbb22a58e482b5026e))
+- Share… copies the link and password together as one message in the app's language ([64b9471](https://github.com/wquguru/cicada/commit/64b94712a1ef3d9b9049e062db0a4952e45b6974))
+
+#### Fixed
+
+- A fresh 7-day share link no longer says it lasts 8 days ([a67e9c7](https://github.com/wquguru/cicada/commit/a67e9c72ba1a20e18c81b7ce291c03b04aa4f5ce))
+- Fast speech without pauses comes out one sentence or clause per line instead of one growing block (#20) ([93dfb07](https://github.com/wquguru/cicada/commit/93dfb075e933fa3903378fb8b3caafd0a462ecd4))
+- The live notes transcript starts a new paragraph every two or three sentences when someone talks fast ([7c40e6b](https://github.com/wquguru/cicada/commit/7c40e6b11301246680e85f22016033945cdd1e3e))
+- The meeting record no longer splits a Chinese word like 所以 across two lines ([ac4d8e0](https://github.com/wquguru/cicada/commit/ac4d8e0929f153c68fae78435ddcfd8de073475a))
+- In the live notes window, fast Chinese lines end at a clause more often instead of between two words ([79af264](https://github.com/wquguru/cicada/commit/79af264913a67bb50123788d92eaac4fb24d7ba4))
+
+### Windows
+
+#### New
+
+- Share… copies the link and password together as one message in the app's language ([b01fe7f](https://github.com/wquguru/cicada/commit/b01fe7fc59215e1f708f61c687434244e4600947))
+
+### Android
+
+#### New
+
+- Share… copies the link and password together as one message in the app's language ([3ba3243](https://github.com/wquguru/cicada/commit/3ba32437b8933d3d22265528ee7a82909d056647))
+
+### Linux
+
+#### New
+
+- Share… copies the link and password together as one message in the app's language ([46e82e2](https://github.com/wquguru/cicada/commit/46e82e203398f24b929535594f936828c42ccf66))
+
+#### Fixed
+
+- Cicada stays in the dock while it runs, so it can be found during a meeting ([7b14308](https://github.com/wquguru/cicada/commit/7b1430864cc54ccc71a3ac414a1191bcdef94c0a))
+
+### Website
+
+- A shared meeting opens on its notes, and each chapter's dialogue, the speakers and the original text appear when asked for ([d231fc8](https://github.com/wquguru/cicada/commit/d231fc8c5db2296061c053fd2d3d5799478f5655))
+- A shared meeting with one speaker or one line says 1 person and 1 line in English ([e1efbe8](https://github.com/wquguru/cicada/commit/e1efbe830888d3d4ca2aacbf9054e9b4fd36dc2e))
+
 ## 1.6.1 — 2026-11-08
 
 ### Mac
