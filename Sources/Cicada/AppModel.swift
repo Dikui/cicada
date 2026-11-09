@@ -112,10 +112,9 @@ final class AppModel: ObservableObject {
             if settingsSection != oldValue { voicePickerOpen = false }
         }
     }
-    @Published var systemAudioOK = false
-    /// 系统音频录制 was refused. Turned on later in System Settings, it only takes once Cicada is
-    /// reopened (macOS says so too), so the guide offers that.
-    @Published var systemAudioRefused = false
+    @Published private(set) var systemAudio = SystemAudioAccess.unknown
+    var systemAudioOK: Bool { systemAudio == .granted }
+    var systemAudioRefused: Bool { systemAudio == .refused }
     /// Quitting to reopen (`relaunch`): closing the guide now isn't finishing it.
     var relaunching = false
     /// Speech recognition can run: always on macOS 26; below it, Dictation on and 语音识别 allowed.
@@ -436,7 +435,7 @@ final class AppModel: ObservableObject {
     func refresh() {
         running = listen.isRunning
         // Once the tap has run, the permission is there: pausing doesn't take it away.
-        systemAudioOK = systemAudioOK || (listen.isRunning && !settings.listensToRoom)
+        if listen.isRunning && !settings.listensToRoom && systemAudio != .granted { systemAudio = .granted }
         summary = settings.listensToRoom ? L("麦克风 · \(listen.languageSummary())")
             : settings.hearsBoth ? L("电脑和麦克风 · \(listen.languageSummary())") : listen.languageSummary()
         candidates = listen.candidates
@@ -475,13 +474,10 @@ final class AppModel: ObservableObject {
         checkProblem()
         let devices = AudioDevices.outputs()
         if devices.map(\.uid) != outputs.map(\.uid) { outputs = devices }
-        if listen.isRunning && !settings.listensToRoom && !systemAudioOK { systemAudioOK = true }
         // Refused (in the prompt, or turned off in System Settings later): the tap would only hear silence.
-        if let p = SystemAudioPermission.status() {
-            let ok = p == .granted || (p == .unknown && systemAudioOK)
-            if ok != systemAudioOK { systemAudioOK = ok }
-            if (p == .denied) != systemAudioRefused { systemAudioRefused = p == .denied }
-        }
+        let access = systemAudio.next(status: SystemAudioPermission.status(),
+                                      tapRan: listen.isRunning && !settings.listensToRoom)
+        if access != systemAudio { systemAudio = access }
         let speech = Recognition.ready
         if speech != speechOK { speechOK = speech }
         refreshMicUsers()
