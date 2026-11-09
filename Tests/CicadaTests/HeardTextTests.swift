@@ -175,4 +175,9 @@ import Testing
         #expect(HeardText.continues(a, "いつもですね", gap: 0.2, cut: true))
         #expect(!HeardText.continues(a, "いつもですねこれですねこちらのフィルムも丁寧に剥がしておお", gap: 0.2, cut: true))
     }
+
+    @Test func noLineEndsInsideAConnective() {
+        let t = Array("还要大一些所以很多人")
+        #expect(HeardText.insideConnectives(t) == [6: 5])
+    }
 }

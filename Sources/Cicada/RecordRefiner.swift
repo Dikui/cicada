@@ -118,6 +118,7 @@ struct RecordRefiner {
         // nearest punctuation when there is some a few characters away.
         // Otherwise it ends between words: Chinese comes one character per run, and "审 / 计" is no line end.
         let words = Self.wordStarts(record)
+        let inside = HeardText.insideConnectives(record)
         for k in ends.indices {
             var e = Self.snap(ends[k], in: record)
             if e == ends[k], e > 0, e < m, !words.contains(e) {
@@ -125,6 +126,8 @@ struct RecordRefiner {
                 let before = (0...e).last { words.contains($0) } ?? 0
                 e = after - e <= e - before ? after : before
             }
+            // "所 / 以": the tokenizer splits some connectives; the line ends before the whole word.
+            if let start = inside[e] { e = start }
             ends[k] = max(e, k > 0 ? ends[k - 1] : 0)
         }
         return ends

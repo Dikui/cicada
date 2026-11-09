@@ -94,6 +94,20 @@ enum HeardText {
                                            "如果", "虽然", "或者", "另外", "接下来", "总之", "因此", "于是", "就是说"]
     static let particles: Set<String> = ["吧", "呢", "吗", "啊", "嘛", "呀", "啦"]
 
+    /// Offsets inside a Chinese connective, each with where it starts: no line ends there, even
+    /// where the tokenizer splits the word ("所" "以").
+    static func insideConnectives(_ chars: [Character]) -> [Int: Int] {
+        var out: [Int: Int] = [:]
+        for c in connectives {
+            let w = Array(c)
+            guard chars.count >= w.count else { continue }
+            for p in 0...(chars.count - w.count) where Array(chars[p..<(p + w.count)]) == w {
+                for i in (p + 1)..<(p + w.count) { out[i] = p }
+            }
+        }
+        return out
+    }
+
     static func isCJK(_ text: String) -> Bool {
         text.unicodeScalars.contains { $0.properties.isIdeographic || (0x3040...0x30FF).contains($0.value) }
     }

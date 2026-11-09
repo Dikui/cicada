@@ -36,6 +36,16 @@ import Testing
         #expect(out.map(\.text).joined() == "每天跑一次回收完发通知。")
     }
 
+    /// A line ends before a connective, not inside one the tokenizer splits ("所 / 以", issue #20).
+    @Test func connectiveStaysWhole() {
+        var r = RecordRefiner()
+        _ = r.emitted(id: 1, start: 0, end: 4, text: "实际面积会比这个还要大一些所")
+        _ = r.emitted(id: 2, start: 4, end: 7, text: "以很多人设想的这个概率不是很大")
+        _ = r.emitted(id: 3, start: 7.5, end: 9, text: "好的。")
+        let out = r.heard([run("实际面积会比这个还要大一些所以很多人设想的这个概率不是很大", 0.1, 6.9)], through: 7.2)
+        #expect(out.map(\.text) == ["实际面积会比这个还要大一些", "所以很多人设想的这个概率不是很大"])
+    }
+
     /// Words the live recognizer lost at a cut still reach the record.
     @Test func lostWordsAreKept() {
         var r = RecordRefiner()
