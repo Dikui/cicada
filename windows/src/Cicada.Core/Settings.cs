@@ -56,8 +56,10 @@ public sealed class AppSettings
     [JsonPropertyName("fixMisheard")] public bool FixMisheard { get; set; } = true;
     /// 没见过的名字和专称先问我: a new name is asked about once instead of left as heard.
     [JsonPropertyName("askNames")] public bool AskNames { get; set; } = true;
-    /// 同声传译: hold right Ctrl to speak into the meeting in its language.
+    /// 同声传译: hold the talk key to speak into the meeting in its language.
     [JsonPropertyName("speak")] public bool Speak { get; set; }
+    /// The talk key, a TalkKey name ("rcontrol", "f13"…): not every keyboard has right Ctrl.
+    [JsonPropertyName("talkKey")] public string TalkKey { get; set; } = Cicada.TalkKey.Default;
     /// 我说的语言: "system" or a source code.
     [JsonPropertyName("speakFrom")] public string SpeakFrom { get; set; } = "system";
     /// 对方听到的语言: "room" (what the other side speaks) or a target code.

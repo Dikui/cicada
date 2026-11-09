@@ -46,6 +46,9 @@ sealed partial class SettingsWindow : Window
         scroll.ScrollChanged += (_, e) => { if (e.ViewportWidthChange != 0 && scroll.Content is FrameworkElement p) p.Width = PageWidth(); };
         app.Ling.Changed += OnLingChanged;
         Closed += (_, _) => app.Ling.Changed -= OnLingChanged;
+        // While a talk key is being chosen no key reaches any app: leaving the window ends it.
+        Deactivated += (_, _) => StopChoosingKey();
+        Closed += (_, _) => { if (choosingKey) app.StopChoosingTalkKey(); };
         Render();
     }
 
@@ -269,9 +272,14 @@ sealed partial class SettingsWindow : Window
         // 试听 is pressed, as it would after.
         var note = previewNote ?? (voices.Count == 0 ? PreviewNote(Controller.PreviewResult.NoVoice, target) : null);
         var mine = Languages.Sources.FirstOrDefault(x => x.Code == Languages.FromSystem(System.Globalization.CultureInfo.CurrentUICulture.Name))?.Name ?? "";
+        var key = PushToTalk.Current;
+        FrameworkElement keyControl = choosingKey ? ChoosingKeyBox()
+            : Ui.Row(10, Ui.Keycap(PushToTalk.Label, big: true), Ui.Button(L("更改"), StartChoosingKey, height: 32));
+        var keyHelp = choosingKey ? L(keyRefused ?? "Esc 取消")
+            : TalkKey.Note(key) is { } n ? L(n) : LF("按住%@说话，线上的人听到的是翻译后的声音", PushToTalk.Label);
         yield return Label(L("说话"));
         yield return Group(
-            Card(null, L("按住说话"), LF("按住%@说话，线上的人听到的是翻译后的声音", PushToTalk.Label), Ui.Keycap(PushToTalk.Label, big: true)),
+            Card(null, L("按住说话"), keyHelp, keyControl),
             Card(null, L("我说的语言"), null, Ui.Choice([("system", LF("跟随系统（%@）", mine)), .. Languages.Sources.Select(x => (x.Code, x.Name))], s.SpeakFrom, v => { s.SpeakFrom = v; Save(); Render(); })),
             Card(null, L("线上的人听到的语言"), s.SpeakTo == "room" ? LF("现在是 %@", Ui.TargetName(target)) : null,
                 Ui.Choice([("room", L("对方说的语言")), .. Languages.Targets.Select(t => (t.Code, t.Name))], s.SpeakTo, v => { s.SpeakTo = v; Save(); Render(); })),
@@ -280,6 +288,48 @@ sealed partial class SettingsWindow : Window
         yield return Label(L("麦克风"));
         yield return Group(
             Card(null, L("译文送进会议"), cable ? L("在会议软件里把麦克风选成 CABLE Output") : L("需要装免费的 VB-Cable；装的时候 Windows 会请你确认"), cableControl));
+    }
+
+    // 按住说话's 更改: waiting for a key, and why the last one pressed can't be it.
+    bool choosingKey;
+    string? keyRefused;
+
+    public void StartChoosingKey()
+    {
+        choosingKey = true; keyRefused = null;
+        app.ChooseTalkKey(KeyPressed);
+        Render();
+    }
+
+    void StopChoosingKey()
+    {
+        if (!choosingKey) return;
+        choosingKey = false; keyRefused = null;
+        app.StopChoosingTalkKey();
+        Render();
+    }
+
+    void KeyPressed(int vk)
+    {
+        if (!choosingKey) return;
+        if (vk == 0x1B) { StopChoosingKey(); return; }
+        var (key, refused) = TalkKey.Choose(vk);
+        if (key is null) { keyRefused = refused; app.ChooseTalkKey(KeyPressed); Render(); return; }
+        choosingKey = false; keyRefused = null;
+        app.SetTalkKey(key);
+        Render();
+    }
+
+    /// "按下想用的键…" in a dashed accent box where the keycap was.
+    static FrameworkElement ChoosingKeyBox()
+    {
+        var box = new Grid { Width = 176, Height = 36 };
+        box.Children.Add(new System.Windows.Shapes.Rectangle { Fill = Palette.AccentPale, Stroke = Palette.AccentFill, StrokeThickness = 1.5, StrokeDashArray = [4, 3], RadiusX = 8, RadiusY = 8 });
+        var t = Ui.Text(L("按下想用的键…"), 13, Palette.AccentText, wrap: false);
+        t.HorizontalAlignment = HorizontalAlignment.Center; t.VerticalAlignment = VerticalAlignment.Center;
+        box.Children.Add(t);
+        System.Windows.Automation.AutomationProperties.SetName(box, L("按下想用的键…"));
+        return box;
     }
 
     // 试听's result, shown under the voice until another voice is picked or 试听 is pressed again.
