@@ -130,9 +130,10 @@ final class AppModel: ObservableObject {
     @Published var onboardingStep = 1
     /// Step 3 is showing what skipping the key leaves out (debug: `onboarding:3,skip`).
     @Published var onboardingKeySkip = false
-    /// Step 4's yes/no (false) or checklist (true); nil follows whether speaking is on
-    /// (debug: `onboarding:4,ask` / `onboarding:4,setup`).
-    @Published var onboardingSpeakSetup: Bool?
+    /// What step 4 shows (debug: `onboarding:4,ask` / `onboarding:4,setup`).
+    enum SpeakStep { case followSetting, ask, checklist }
+    /// Step 4's yes/no or checklist; until one is chosen, the checklist if speaking is already on.
+    @Published var onboardingSpeakSetup = SpeakStep.followSetting
     /// Debug: which meeting and tab the main window shows ("<id>" or "<id>,transcript").
     @Published var mainShow: String?
     /// Hold right ⌥ is chosen but "输入监控" isn't allowed yet.
@@ -1807,7 +1808,7 @@ final class AppModel: ObservableObject {
             let p = arg.split(separator: ",").map(String.init)
             onboardingStep = min(max(Int(p.first ?? "") ?? 1, 1), OnboardingView.done)
             onboardingKeySkip = p.contains("skip")
-            onboardingSpeakSetup = p.contains("setup") ? true : p.contains("ask") ? false : nil
+            onboardingSpeakSetup = p.contains("setup") ? .checklist : p.contains("ask") ? .ask : .followSetting
             openOnboarding?()
         case "step": onboardingStep = Int(arg) ?? 1
         case "samplePlay": ensureListening(); sample.play()
