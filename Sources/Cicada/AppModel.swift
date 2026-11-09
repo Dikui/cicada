@@ -55,7 +55,7 @@ final class AppModel: ObservableObject {
     /// Settings › AI 服务's 自己选模型 is unfolded.
     @Published var aiModelsOpen = false
 
-    @Published var running = false
+    @Published private(set) var running = false
     /// The meeting is about to end by itself (a hang-up or a long silence) unless someone keeps it going.
     @Published private(set) var ending: MeetingEndWatch.Pending?
     /// The last meeting ended by itself: the menu says so, and the next call in a meeting app starts a new one.
@@ -68,18 +68,18 @@ final class AppModel: ObservableObject {
     private var fakeCalls: [String: String]?
     private var endTimesOverride: (silence: Double, countdown: Double, grace: Double)?
     @Published var status = L("准备就绪")
-    @Published var summary = ""
-    @Published var installed: Set<String> = []
-    @Published var candidates: [Lang] = []
+    @Published private(set) var summary = ""
+    @Published private(set) var installed: Set<String> = []
+    @Published private(set) var candidates: [Lang] = []
     /// 听不出: the languages offered while "auto" can't tell (empty when it can).
-    @Published var languageAsk: [Lang] = []
+    @Published private(set) var languageAsk: [Lang] = []
     /// The second speech model coming in the background: its name and how far along.
-    @Published var modelFetch: ModelFetch?
+    @Published private(set) var modelFetch: ModelFetch?
     /// 先用○○听: offered, listening, or just handed back to this Mac.
-    @Published var cloud = CloudState()
+    @Published private(set) var cloud = CloudState()
     /// 继续等 was chosen: the offer stays away until the next meeting.
     private var cloudDeclined = false
-    @Published var identifyingLanguage = false
+    @Published private(set) var identifyingLanguage = false
     /// 电脑和会议室 with the microphone not allowed: the Mac's side goes on, the room's can't start.
     @Published var hybridMicDenied = false
     /// Debug (`micDeniedSim`): 电脑和会议室 acts as if the microphone were refused.
@@ -91,17 +91,17 @@ final class AppModel: ObservableObject {
     private var micDeniedSince: Date?
     private var micDeniedNotified = false
     /// 麦克风没声音: the room mic stayed digital silence after being opened again.
-    @Published var roomMicSilent = false
+    @Published private(set) var roomMicSilent = false
     /// 外接麦克风断开了: what happened instead (RoomMicLoss), for a few seconds.
     @Published var roomMicLost: String?
     /// The debug command's pretend unplug: these inputs count as gone.
     private var fakeGoneMics: Set<String> = []
     /// Why the model 听不出 needed couldn't be had, when that is so.
-    @Published var modelProblem: ModelProblem?
+    @Published private(set) var modelProblem: ModelProblem?
     /// That model was the one to start with and there is none to fall back on: nothing is listening.
-    @Published var modelBlocked = false
+    @Published private(set) var modelBlocked = false
     /// 听不出 because none of the installed models hear their language: it offers ones not installed.
-    @Published var languageNotInstalled = false
+    @Published private(set) var languageNotInstalled = false
     @Published var outputs: [OutputDevice] = []
     @Published var speakPhase: SpeakEngine.Phase = .idle
     @Published var settingsSection: SettingsSection =
