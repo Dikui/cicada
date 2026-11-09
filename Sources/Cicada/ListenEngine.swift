@@ -1572,11 +1572,16 @@ final class ListenEngine {
 
     /// A clause end for a long line (a Chinese line past 24 characters), or past `capped` any
     /// place between words: the latest one heard a moment ago, with enough before it to be a line.
+    /// The notes window is read, not glanced at: there a Chinese line waits a little longer for a
+    /// clause before it is cut between words ("不是很 | 大"); the subtitle bar keeps up with the
+    /// speaker. Japanese has few clause marks besides 、: waiting there only made lines longer.
     private func boundaryCut(_ fed: Double, held: Double) -> (at: Int, kind: HeardText.Boundary, end: Double)? {
         let code = activeLang?.code ?? ""
         let line = HeardText.size(shownDraft)
+        let patient = settings.displayMode != "bar" && code.hasPrefix("zh")
+        let cap = HeardText.capped(code) + (patient ? HeardText.capped(code) / 3 : 0)
         let kind: HeardText.Boundary
-        if line >= HeardText.capped(code) || held >= 12 { kind = .word }
+        if line >= cap || held >= (patient ? 15 : 12) { kind = .word }
         else if line >= HeardText.clauseFrom(code) { kind = .clause }
         else { return nil }
         let text = shownDraft
