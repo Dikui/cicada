@@ -54,14 +54,16 @@ public static class VoiceCatalog
     public static IReadOnlyList<VoiceOption> Options(string language, AIConfig config, bool windowsHasIt = true) =>
         windowsHasIt ? [.. Cloud(language, config), new(SystemId, "Windows", "本机")] : Cloud(language, config);
 
-    /// What a language uses until the user picks: the service's first voice once it can speak,
-    /// else Windows'.
-    public static string DefaultId(string language, AIConfig config, bool speaks) => speaks && Cloud(language, config) is [var first, ..] ? first.Id : SystemId;
+    /// What a language uses until the user picks: the service's first voice once it can speak (or
+    /// when Windows has none for the language), else Windows'.
+    public static string DefaultId(string language, AIConfig config, bool speaks, bool windowsHasIt = true) =>
+        (speaks || !windowsHasIt) && Cloud(language, config) is [var first, ..] ? first.Id : SystemId;
 
-    /// The voice chosen for a language, if this service still offers it: a Ming voice saved
-    /// before switching to ZenMux is not sent there.
-    public static string Chosen(AppSettings settings, string language, AIConfig config, bool speaks) =>
-        settings.SpeakVoices.TryGetValue(Key(language), out var id) && Options(language, config).Any(v => v.Id == id) ? id : DefaultId(language, config, speaks);
+    /// The voice chosen for a language, if it is still offered: a Ming voice saved before switching
+    /// to ZenMux is not sent there, and "system" saved where Windows has no voice for the language
+    /// (Chinese Windows often has only Chinese ones) left the voice blank and 试听 silent (#22).
+    public static string Chosen(AppSettings settings, string language, AIConfig config, bool speaks, bool windowsHasIt = true) =>
+        settings.SpeakVoices.TryGetValue(Key(language), out var id) && Options(language, config, windowsHasIt).Any(v => v.Id == id) ? id : DefaultId(language, config, speaks, windowsHasIt);
 
     /// A short line to try a voice with, in the language it will speak.
     public static string Sample(string language) => Key(language) switch
@@ -231,7 +233,7 @@ public sealed class SpeakEngine
     public async Task<bool> Voice(string text, string language, ISpeechSink sink)
     {
         var config = ling.Config;
-        var id = VoiceCatalog.Chosen(settings, language, config, ling.Speaks);
+        var id = VoiceCatalog.Chosen(settings, language, config, ling.Speaks, systemVoice.Has(language));
         var prefix = config.IsLing ? VoiceCatalog.MingPrefix : VoiceCatalog.CloudPrefix;
         if (id.StartsWith(prefix) && ling.Speaks)
         {

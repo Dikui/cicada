@@ -261,10 +261,13 @@ sealed partial class SettingsWindow : Window
         var config = app.Ling.Config;
         var voices = VoiceCatalog.Options(target, config, app.WindowsVoice.Has(target))
             .Select(v => (v.Id, v.Id == VoiceCatalog.SystemId ? L("Windows 自带") : v.Tags.Length == 0 ? v.Name : $"{v.Name} · {string.Join(" · ", v.Tags.Split(" · ").Select(L))}")).ToList();
-        var chosen = VoiceCatalog.Chosen(s, target, config, app.Ling.Speaks);
+        var chosen = VoiceCatalog.Chosen(s, target, config, app.Ling.Speaks, app.WindowsVoice.Has(target));
         var voice = Ui.Row(8,
-            Ui.Choice(voices, chosen, v => { s.SpeakVoices[VoiceCatalog.Key(target)] = v; Save(); }, 280),
-            Ui.Button(L("试听"), () => _ = app.Preview(target), height: 32));
+            Ui.Choice(voices, chosen, v => { s.SpeakVoices[VoiceCatalog.Key(target)] = v; previewNote = null; Save(); Render(); }, 280),
+            Ui.Button(app.Previewing ? L("停止") : L("试听"), () => { if (app.Previewing) app.StopPreview(); else _ = RunPreview(); }, height: 32));
+        // No voice at all for the language (Windows has none, the service speaks none): say so before
+        // 试听 is pressed, as it would after.
+        var note = previewNote ?? (voices.Count == 0 ? PreviewNote(Controller.PreviewResult.NoVoice, target) : null);
         var mine = Languages.Sources.FirstOrDefault(x => x.Code == Languages.FromSystem(System.Globalization.CultureInfo.CurrentUICulture.Name))?.Name ?? "";
         yield return Label(L("说话"));
         yield return Group(
@@ -272,10 +275,50 @@ sealed partial class SettingsWindow : Window
             Card(null, L("我说的语言"), null, Ui.Choice([("system", LF("跟随系统（%@）", mine)), .. Languages.Sources.Select(x => (x.Code, x.Name))], s.SpeakFrom, v => { s.SpeakFrom = v; Save(); Render(); })),
             Card(null, L("线上的人听到的语言"), s.SpeakTo == "room" ? LF("现在是 %@", Ui.TargetName(target)) : null,
                 Ui.Choice([("room", L("对方说的语言")), .. Languages.Targets.Select(t => (t.Code, t.Name))], s.SpeakTo, v => { s.SpeakTo = v; Save(); Render(); })),
-            Card(null, LF("线上的人听到的声音（%@）", Ui.TargetName(target)), null, voice));
+            note is null ? Card(null, LF("线上的人听到的声音（%@）", Ui.TargetName(target)), null, voice)
+                : Ui.Stack(0, Card(null, LF("线上的人听到的声音（%@）", Ui.TargetName(target)), null, voice), PreviewNoteBox(note.Value)));
         yield return Label(L("麦克风"));
         yield return Group(
             Card(null, L("译文送进会议"), cable ? L("在会议软件里把麦克风选成 CABLE Output") : L("需要装免费的 VB-Cable；装的时候 Windows 会请你确认"), cableControl));
+    }
+
+    // 试听's result, shown under the voice until another voice is picked or 试听 is pressed again.
+    (string Title, string Help, bool VoiceSettings)? previewNote;
+
+    public async Task RunPreview()
+    {
+        var target = app.Speak.Target;
+        previewNote = null;
+        var playing = app.Preview(target);
+        Render();
+        var result = await playing;
+        previewNote = PreviewNote(result, target);
+        Render();
+    }
+
+    (string Title, string Help, bool VoiceSettings)? PreviewNote(Controller.PreviewResult result, string target) => result switch
+    {
+        Controller.PreviewResult.NoVoice => (LF("这台电脑没有%@的声音，没放出来。", Ui.TargetName(target)), L("在 Windows 设置里添加这个语言的语音，或者换一个 AI 服务的声音。"), true),
+        Controller.PreviewResult.NoSpeaker => (L("没放出声音：找不到扬声器。"), L("看看耳机或扬声器有没有连上。"), false),
+        Controller.PreviewResult.FellBack => (LF("%@ 的声音没连上，刚才放的是 Windows 自带的。", app.Ling.Config.Name), L("开会时也会这样换过去，不会不出声。"), false),
+        Controller.PreviewResult.Failed => (L("没放出声音。"), L("再试一次，还不行就换一个声音。"), false),
+        _ => null,
+    };
+
+    static FrameworkElement PreviewNoteBox((string Title, string Help, bool VoiceSettings) note)
+    {
+        // One wrapping line with the link inline: English runs wider than the card.
+        var help = Ui.Helper(note.Help);
+        help.TextWrapping = TextWrapping.Wrap;
+        if (note.VoiceSettings)
+        {
+            var link = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run(L("打开语音设置"))) { Foreground = Palette.AccentText, TextDecorations = null, Cursor = System.Windows.Input.Cursors.Hand };
+            link.Click += (_, _) => { try { Process.Start(new ProcessStartInfo("ms-settings:speech") { UseShellExecute = true }); } catch { } };
+            help.Inlines.Add(new System.Windows.Documents.Run(" "));
+            help.Inlines.Add(link);
+        }
+        var text = Ui.Stack(3, Ui.Text(note.Title, 13, Palette.Ink), help);
+        return new Border { Background = Palette.Mica, CornerRadius = new CornerRadius(8), Padding = new Thickness(12, 9, 12, 10), Margin = new Thickness(0, 0, 0, 12), Child = text };
     }
 
     async Task InstallCable()

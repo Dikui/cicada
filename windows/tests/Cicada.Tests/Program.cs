@@ -2685,6 +2685,12 @@ static class Tests
         var settings = new AppSettings { SpeakVoices = { ["en"] = "ming:US_Emma" } };
         Equal("cloud:Kore", VoiceCatalog.Chosen(settings, "en", zen, true), "a Ming voice isn't sent to ZenMux");
         Equal("ming:US_Emma", VoiceCatalog.Chosen(settings, "en", new AppSettings().AIConfig(), true), "and is used again on Ling");
+        // #22: Windows' voice saved for a language this PC has no voice for.
+        var system = new AppSettings { SpeakVoices = { ["en"] = "system" } };
+        var ling = new AppSettings().AIConfig();
+        Equal("system", VoiceCatalog.Chosen(system, "en", ling, true, windowsHasIt: true), "kept where Windows has it");
+        Equal("ming:US_Emma", VoiceCatalog.Chosen(system, "en", ling, true, windowsHasIt: false), "the service's voice where it doesn't");
+        Equal("ming:US_Emma", VoiceCatalog.Chosen(system, "en", ling, false, windowsHasIt: false), "even before the service is checked");
     }
 
     public static async Task HearingGoesToTheChosenHearModel()
@@ -3414,4 +3420,5 @@ static class Tests
         Equal(null, client.Store.Read(s.Id), "forgotten after revoke");
         Equal(2, server.Seen.Count(x => x == "POST /api/v1/devices"), "the device file is reused");
     }
+
 }

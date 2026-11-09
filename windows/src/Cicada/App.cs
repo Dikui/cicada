@@ -795,8 +795,40 @@ sealed class Controller
         _ = Speak.Speak(Wav.Bytes(pcm), new DeviceSpeaker(Endpoints.Cable));
     }
 
-    /// 试听: a voice speaks its sample line on the speakers (not into the meeting).
-    public Task Preview(string language) => Speak.Voice(VoiceCatalog.Sample(language), language, new DeviceSpeaker(() => Endpoints.Default(Endpoints.Flow.Render)));
+    public enum PreviewResult { Played, Stopped, NoSpeaker, NoVoice, FellBack, Failed }
+    DeviceSpeaker? previewing;
+    public bool Previewing => previewing is not null;
+    public void StopPreview() => previewing?.Stop();
+
+    /// 试听: a voice speaks its sample line on the speakers (not into the meeting). It used to fail
+    /// without a word (#22); now the result says why, for the line under the voice.
+    public async Task<PreviewResult> Preview(string language)
+    {
+        previewing?.Stop();
+        var speaker = new DeviceSpeaker(() => Endpoints.Default(Endpoints.Flow.Render));
+        PreviewResult result;
+        if (!speaker.Ready) result = PreviewResult.NoSpeaker;
+        else
+        {
+            previewing = speaker;
+            Changed();
+            try
+            {
+                var chosen = VoiceCatalog.Chosen(Settings, language, Ling.Config, Ling.Speaks, WindowsVoice.Has(language));
+                var voiced = await Speak.Voice(VoiceCatalog.Sample(language), language, speaker);
+                result = speaker.Stopped ? PreviewResult.Stopped
+                    : !voiced ? (WindowsVoice.Has(language) ? PreviewResult.Failed : PreviewResult.NoVoice)
+                    : speaker.Failed ? PreviewResult.NoSpeaker
+                    : chosen != VoiceCatalog.SystemId && Speak.LastVoice == "system" ? PreviewResult.FellBack
+                    : PreviewResult.Played;
+            }
+            catch (Exception e) { Log.Debug($"preview: failed {e.GetType().Name}"); result = PreviewResult.Failed; }
+            finally { if (previewing == speaker) previewing = null; }
+        }
+        Log.Debug($"preview: {language} {result}");
+        Changed();
+        return result;
+    }
 
     // MARK: Windows
 
@@ -900,6 +932,8 @@ sealed class Controller
     }
 
     public void SettingsPage(string id) => settingsWindow?.Show(id);
+    /// The open settings window, for the debug pipe's preview.
+    public SettingsWindow? OpenSettings => settingsWindow;
     /// Debug: 改这句… on a record's line; 词表 › 粘贴导入 with `text` pasted in.
     public void DebugEditLine(string id, string line) { ShowRecords(id); mainWindow?.DebugEdit(id, line); }
     public void DebugPaste(string text) { ShowSettings(); SettingsPage("words"); settingsWindow?.DebugImport(text); }
@@ -1337,7 +1371,11 @@ static class DebugServer
                     var p = arg.Split('|');
                     return new JsonObject { ["ok"] = app.Store.Audio?.Rewrap(p[0], p[1], p.Length > 2 ? double.Parse(p[2], System.Globalization.CultureInfo.InvariantCulture) : null) ?? false };
                 }
-            case "preview": _ = app.Preview(arg.Length > 0 ? arg : app.Speak.Target); break;
+            // preview: 试听 in the open settings (its result line shows there), else on its own.
+            case "preview":
+                if (arg.Length == 0 && app.OpenSettings is { } sw) _ = sw.RunPreview();
+                else _ = app.Preview(arg.Length > 0 ? arg : app.Speak.Target);
+                break;
             case "calls":
                 app.FakeCalls = arg switch { "real" => null, "" or "none" => [], _ => arg.Split(',').Select(p => p.Split('=', 2)).ToDictionary(p => p[0], p => p[^1]) };
                 break;
