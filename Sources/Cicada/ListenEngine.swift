@@ -14,6 +14,8 @@ struct Segment {
     /// and whether Cicada ended it at a pause: what deciding a join needs (`HeardText.continues`).
     var start = 0.0, end = 0.0, clock = 0
     var cut = false
+    /// Cicada ended it where a sentence or clause ends, on purpose: the next line doesn't join it.
+    var split = false
     /// The record's own recognizer heard it too and will settle its words (`onRefined`).
     var refining = false
 }
@@ -206,6 +208,26 @@ final class ListenEngine {
     private var lastCutThrough = 0.0
     /// A cut was asked for: the next final line ends at Cicada's pause, not the speaker's.
     private var cutAsked = false
+    /// The last draft that ended a sentence and its audio time (`HeardText.endsSentence`), and the
+    /// head of one a cut was asked to end at: the final is checked against that, not the whole draft.
+    private var volatileSentence: (head: String, end: Double)?
+    private var sentenceCutHead: String?
+    /// Where the line in progress could end short of a sentence (`HeardText.boundaries`, offsets in
+    /// `shownDraft`), each with the audio time of the draft it first showed in.
+    private var seenBoundaries: [(at: Int, kind: HeardText.Boundary, end: Double)] = []
+    /// The cut asked for ends there: the final is split at it.
+    private var pendingSplit: (near: Int, kind: HeardText.Boundary)?
+    /// When the last cut was asked for: the next waits for its line (a moment at most), or it
+    /// would take the place the first one is to be split at.
+    private var cutAskedAt = Date.distantPast
+    /// What a line ended at a sentence ran on into the next one: it starts the next line, and the
+    /// draft shows it in front (`HeardText.splitAtSentenceEnd`).
+    private var carry: (text: String, start: Double)?
+    /// The line in progress as shown: what was carried over, then the draft.
+    private var shownDraft: String {
+        guard let carry else { return volatileText }
+        return [carry.text, volatileText].filter { !$0.isEmpty }.joined(separator: joiner(for: activeLang?.code ?? ""))
+    }
     /// Final transcript time and how long after the last word it came, per segment, until its translation lands.
     private var finalTiming: [Int: (at: Date, recognize: Double?)] = [:]
 
@@ -404,6 +426,7 @@ final class ListenEngine {
         // Lines still waiting for the language are recorded rather than dropped: the meeting
         // ended before detection settled it. Not when the only model said the audio isn't its
         // language: those lines are noise, and the recording keeps what was said.
+        flushCarry()
         if settings.sourceMode == .auto, !recordable, !mismatch { flushUnconfirmed() }
         unconfirmed = []
         heardSpeech = isRunning && (router.stats().voicedTotal >= 3 || firstHeardAt != nil)
@@ -430,6 +453,10 @@ final class ListenEngine {
         recognizer = nil
         segments.removeAll()
         volatileText = ""
+        volatileSentence = nil
+        carry = nil
+        seenBoundaries = []
+        pendingSplit = nil
         volatileTranslation = ""
         lastVolatileSent = ""
         volatileInFlight = false
@@ -684,10 +711,15 @@ final class ListenEngine {
         }
         activeLang = lang
         volatileText = ""
+        carry = nil
+        seenBoundaries = []
+        pendingSplit = nil
         volatileTranslation = ""
         lastVolatileSent = ""
         volatileEpoch += 1
         cutAsked = false
+        volatileSentence = nil
+        sentenceCutHead = nil
         // The new transcriber's audio clock starts again at zero.
         lastCutThrough = 0
         onStateChange?()
@@ -790,11 +822,30 @@ final class ListenEngine {
         if !text.isEmpty { lastWordsAt = Date(); onWords?() }
         if result.isFinal {
             text = HeardText.clean(text)
-            let fuller = HeardText.fuller(final: text, draft: volatileText)
+            let fuller = HeardText.fuller(final: text, draft: sentenceCutHead ?? volatileText)
+            let splitAt = pendingSplit
+            pendingSplit = nil
+            sentenceCutHead = nil
+            volatileSentence = nil
+            seenBoundaries = []
             if fuller != text {
                 debugLog("final dropped words the draft had: kept the draft")
                 contentLog("FINAL was: \(text)")
                 text = fuller
+            }
+            var start = result.start, end = result.end
+            if let c = carry {
+                carry = nil
+                text = HeardText.clean(c.text + joiner(for: activeLang?.code ?? "") + text)
+                start = c.start
+            }
+            let code = activeLang?.code ?? ""
+            if let at = splitAt, let split = at.kind == .sentence ? HeardText.splitAtSentenceEnd(text)
+                : HeardText.split(text, near: at.near, kind: at.kind, language: code) {
+                // Times shared out by length: the tail is a second or so of the next sentence.
+                let at = start + (end - start) * Double(split.head.count) / Double(max(1, text.count))
+                carry = (split.tail, at)
+                (text, end) = (split.head, at)
             }
             volatileText = ""
             volatileEpoch += 1
@@ -809,19 +860,20 @@ final class ListenEngine {
             let provisional = given ?? (volatileTranslation.isEmpty ? nil : volatileTranslation)
             var seg = Segment(id: nextSegmentID, text: text, sourceCode: result.language ?? activeLang?.code ?? "auto",
                               translation: provisional)
-            seg.start = result.start
-            seg.end = result.end
+            seg.start = start
+            seg.end = end
             seg.clock = gen
             seg.cut = cutAsked
+            seg.split = splitAt != nil
             cutAsked = false
             seg.refining = refiner != nil
             if refiner != nil { settled(refiner!.emitted(id: seg.id, start: seg.start, end: seg.end, text: seg.text)) }
             if settings.speakerVoices {
-                seg.voiceSamples = router.voiceSamples(from: result.start, to: result.end)
+                seg.voiceSamples = router.voiceSamples(from: start, to: end)
             }
             nextSegmentID += 1
             // How long ago, in real time, the sentence's last word was spoken.
-            let ago = router.fedSeconds() - result.end
+            let ago = router.fedSeconds() - end
             finalTiming[seg.id] = (Date(), ago.isFinite && ago >= 0 && ago < 30 ? ago : nil)
             if finalTiming.count > 40, let oldest = finalTiming.keys.min() { finalTiming[oldest] = nil }
             var shown = seg
@@ -833,7 +885,7 @@ final class ListenEngine {
             volatileTranslation = ""
             lastVolatileSent = ""
             contentLog(String(format: "FINAL conf=%.2f [%@] %@", conf, activeLang?.locale ?? "?", text))
-            let duration = max(0, result.end - result.start)
+            let duration = max(0, end - start)
             // Only confirmed-language sentences go into the meeting record; earlier ones wait.
             let spoken = duration.isFinite ? duration : 0
             if recordable {
@@ -860,7 +912,10 @@ final class ListenEngine {
             if firstHeardAt == nil, text.contains(where: \.isLetter) { firstHeardAt = Date() }
             if volatileText.isEmpty { volatileStartedAt = Date(); volatileStartClock = router.fedSeconds() }
             if text != volatileText { volatileChangedAt = Date() }
+            // A sentence just ended: remember where, until words past it come to end the line there.
+            if HeardText.endsSentence(text) { volatileSentence = (text, result.end) }
             volatileText = text
+            noteBoundaries(at: result.end)
             checkForeignLetters(text)
         }
         renderSubtitles()
@@ -879,10 +934,11 @@ final class ListenEngine {
     }
 
     private func renderSubtitles() {
-        guard !(segments.isEmpty && volatileText.isEmpty) else { return }
+        let draft = shownDraft
+        guard !(segments.isEmpty && draft.isEmpty) else { return }
         let srcJoin = joiner(for: activeLang?.code ?? "en")
         let last = segments.last.map { fixedText[$0.id] ?? $0.text } ?? ""
-        let source = [last, volatileText].filter { !$0.isEmpty }
+        let source = [last, draft].filter { !$0.isEmpty }
             .joined(separator: srcJoin.isEmpty ? " " : srcJoin)
         if settings.sourceMode == .auto, !recordable {
             onSubtitle?(source, asksLanguage ? L("听不出是哪种语言，到菜单栏里选一下") : L("正在识别语言…"))
@@ -1203,6 +1259,10 @@ final class ListenEngine {
         unconfirmed = []
         segments.removeAll()
         volatileText = ""
+        volatileSentence = nil
+        carry = nil
+        seenBoundaries = []
+        pendingSplit = nil
         volatileTranslation = ""
         lastVolatileSent = ""
         mismatch = false
@@ -1376,7 +1436,7 @@ final class ListenEngine {
         // A partial without a translation is fine while the AI service will translate the sentence.
         let coming = kind == .draft && translator?.ling.usable == true
         if out == nil, !coming, segments.allSatisfy({ $0.translation == nil }) && volatileTranslation.isEmpty {
-            onSubtitle?(volatileText.isEmpty ? (segments.last?.text ?? "") : volatileText, L("翻译暂不可用"))
+            onSubtitle?(shownDraft.isEmpty ? (segments.last?.text ?? "") : shownDraft, L("翻译暂不可用"))
         }
         return out
     }
@@ -1487,12 +1547,57 @@ final class ListenEngine {
         for l in lines { onRefined?(l.id, l.text) }
     }
 
+    /// Stopping: what a sentence cut carried over is a line of its own, not lost with the draft.
+    private func flushCarry() {
+        guard let c = carry, isRunning else { carry = nil; return }
+        carry = nil
+        volatileText = ""
+        volatileSentence = nil
+        sentenceCutHead = nil
+        handle(.init(text: c.text, isFinal: true, start: c.start, end: max(c.start, router.fedSeconds()), confidence: nil),
+               generation: generation)
+    }
+
+    /// Each place the line could end, timed by the first draft that showed it: the words before it
+    /// were heard by then. One that moves a character or so as the draft is revised keeps its time.
+    private func noteBoundaries(at end: Double) {
+        let text = shownDraft
+        let carried = text.count - volatileText.count
+        let now = HeardText.boundaries(text, language: activeLang?.code ?? "").filter { $0.at > carried }
+        seenBoundaries = now.map { b in
+            let old = seenBoundaries.first { $0.kind == b.kind && abs($0.at - b.at) <= 1 }
+            return (b.at, b.kind, old?.end ?? end)
+        }
+    }
+
+    /// A clause end for a long line (a Chinese line past 24 characters), or past `capped` any
+    /// place between words: the latest one heard a moment ago, with enough before it to be a line.
+    private func boundaryCut(_ fed: Double, held: Double) -> (at: Int, kind: HeardText.Boundary, end: Double)? {
+        let code = activeLang?.code ?? ""
+        let line = HeardText.size(shownDraft)
+        let kind: HeardText.Boundary
+        if line >= HeardText.capped(code) || held >= 12 { kind = .word }
+        else if line >= HeardText.clauseFrom(code) { kind = .clause }
+        else { return nil }
+        let text = shownDraft
+        let fit = seenBoundaries.filter { b in
+            b.kind >= kind && b.end > lastCutThrough && b.end > volatileStartClock + 0.5 && fed - b.end >= 0.4
+                && HeardText.size(String(text.prefix(b.at))) >= (HeardText.isCJK(text) ? 12 : 5)
+        }
+        // Past the cap a clause end still beats a word gap, if it leaves at least half the line.
+        if kind == .word, let clause = fit.filter({ $0.kind >= .clause && $0.at * 2 >= text.count }).max(by: { $0.at < $1.at }) {
+            return clause
+        }
+        return fit.max { $0.at < $1.at }
+    }
+
     /// SpeechTranscriber ends a sentence only at a clear pause; in a quick conversation that can
     /// take 15–20 s, and the subtitle stays a draft that long (the notes wait for it too). A long
-    /// line in progress is ended at the next small pause: a dip in the sound, or no new words for
-    /// a moment.
+    /// line in progress is ended where a sentence ends, at the next small pause (a dip in the
+    /// sound), at a clause, past a cap between words, or when no new words come for a moment.
     private func maybeCutSentence() {
-        guard isRunning, !cutting, let recognizer, !volatileText.isEmpty, volatileText != lastCut else { return }
+        guard isRunning, !cutting, let recognizer, !volatileText.isEmpty, volatileText != lastCut,
+              (pendingSplit == nil && !cutAsked) || Date().timeIntervalSince(cutAskedAt) > 2 else { return }
         let cjk = joiner(for: activeLang?.code ?? "") == ""
         let long = cjk ? volatileText.count >= 24 : volatileText.split(separator: " ").count >= 10
         guard long else { return }
@@ -1502,17 +1607,40 @@ final class ListenEngine {
         let c = router.clock()
         let mid = c.pause.end - c.pause.length / 2
         let through: Double, why: String
-        if c.silence >= needed {
+        var boundary: (at: Int, kind: HeardText.Boundary)?
+        // The draft went on past the sentence, and still ends it about there (drafts get revised).
+        if let s = volatileSentence, volatileText.count > s.head.count + 1,
+           volatileText.prefix(s.head.count + 2).suffix(5).contains(where: { "。！？.!?".contains($0) }), s.end > lastCutThrough,
+           s.end > volatileStartClock + 1, c.fed - s.end >= 0.5 {
+            // The speaker finished a sentence and went straight on: end the line there. Its "." is
+            // the speaker's, so the next piece doesn't join it back (`HeardText.continues`).
+            (through, why) = (s.end, "sentence")
+        } else if c.silence >= needed {
             (through, why) = (c.fed, "quiet")
         } else if c.pause.length >= needed, mid > volatileStartClock + 1.5, mid > lastCutThrough, c.pause.end <= c.fed {
             (through, why) = (mid, "pause")  // a pause already behind us: end the line there
+        } else if let b = boundaryCut(c.fed, held: held) {
+            (through, why) = (b.end, b.kind == .clause ? "clause" : "word")
+            boundary = (b.at, b.kind)
         } else if Date().timeIntervalSince(volatileChangedAt) >= (held >= 8 ? 0.6 : 1.2) {
             (through, why) = (c.fed, "stalled")
         } else {
             return
         }
         cutting = true
-        cutAsked = true
+        cutAskedAt = Date()
+        cutAsked = why != "sentence" && boundary == nil
+        let carried = shownDraft.count - volatileText.count
+        if why == "sentence", let s = volatileSentence {
+            sentenceCutHead = s.head
+            pendingSplit = (carried + s.head.count, .sentence)
+        } else if let b = boundary {
+            sentenceCutHead = String(volatileText.prefix(max(0, b.at - carried)))
+            pendingSplit = (b.at, b.kind)
+        } else {
+            sentenceCutHead = nil
+            pendingSplit = nil
+        }
         lastCut = volatileText
         lastCutThrough = through
         let chars = volatileText.count
@@ -1524,14 +1652,16 @@ final class ListenEngine {
             } catch {
                 debugLog("cut: finalize failed \(error)")
                 self?.cutAsked = false
+                self?.sentenceCutHead = nil
+                self?.pendingSplit = nil
             }
             self?.cutting = false
         }
     }
 
     private func translateVolatile() {
-        guard isRunning, !translationOff(), !volatileInFlight, volatileText.count >= 2, volatileText != lastVolatileSent else { return }
-        let text = volatileText
+        let text = shownDraft
+        guard isRunning, !translationOff(), !volatileInFlight, text.count >= 2, text != lastVolatileSent else { return }
         let epoch = volatileEpoch
         let source = activeLang?.code ?? "auto"
         lastVolatileSent = text

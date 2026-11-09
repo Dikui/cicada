@@ -1521,7 +1521,7 @@ final class AppModel: ObservableObject {
               prev.seg.clock == seg.clock, prev.seg.sourceCode == seg.sourceCode,
               // macOS 14/15: the older recognizer ends a line only at a real pause and often drops
               // the full stop, so a missing one says nothing; only a line Cicada cut is a half sentence.
-              !Recognition.legacy || prev.seg.cut,
+              !Recognition.legacy || prev.seg.cut, !prev.seg.split,
               HeardText.continues(prev.seg.text, seg.text, gap: seg.start - prev.seg.end, cut: prev.seg.cut) else {
             appendHeard(seg, t: t, tag: true)
             return
@@ -1559,6 +1559,7 @@ final class AppModel: ObservableObject {
         joined.text = text
         joined.end = seg.end
         joined.cut = seg.cut
+        joined.split = seg.split
         lastHeard = (joined, prev.line)
         store.setSource(lineID: prev.line, text)
         if let id = store.liveID { fixes.applyKnown(lineID: prev.line, in: id) }
