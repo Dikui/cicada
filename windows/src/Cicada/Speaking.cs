@@ -71,32 +71,57 @@ sealed class WindowsVoice : ISystemVoice
     }
 }
 
-/// Hold right Ctrl to talk, anywhere. RegisterHotKey can't see a key being let go, so this is a
-/// low-level keyboard hook; it only watches right Ctrl and never swallows it. (Right Alt is AltGr
-/// on many keyboards, and a lone Alt opens app menus when released.)
+/// Hold the talk key (right Ctrl unless changed) to talk, anywhere. RegisterHotKey can't see a key
+/// being let go, so this is a low-level keyboard hook. A modifier talk key is passed on to other
+/// apps and only counts held alone: another key pressed meanwhile (Ctrl C) ends the press as
+/// Interrupted. Any other talk key (Caps Lock, F13…) is kept from them. (Alt can't be one: released
+/// alone it opens the window's menu, and right Alt is AltGr on many keyboards.)
 sealed class PushToTalk : IDisposable
 {
-    public static string Label => Strings.L("右 Ctrl");
-    const int WhKeyboardLl = 13, WmKeyDown = 0x100, WmKeyUp = 0x101, WmSysKeyDown = 0x104, WmSysKeyUp = 0x105, VkRControl = 0xA3;
+    /// The key in use, read by every label that names it.
+    public static TalkKey.Key Current { get; set; } = TalkKey.Named(null);
+    public static string Label => Strings.L(Current.Label);
+    const int WhKeyboardLl = 13, WmKeyDown = 0x100, WmKeyUp = 0x101, WmSysKeyDown = 0x104, WmSysKeyUp = 0x105;
     readonly HookProc proc; // held, or the GC collects it and Windows calls freed memory
     readonly IntPtr hook;
-    bool down;
-    public event Action? Pressed, Released;
+    bool down, combo;
+    public event Action? Pressed, Released, Interrupted;
+    /// Choosing a new talk key: the next key pressed comes here (its virtual-key code) and until
+    /// then no key reaches any app. Whoever sets it clears it when the choosing ends.
+    public Action<int>? Capture;
 
-    public PushToTalk()
+    // 同声传译 on: with it off a Caps Lock or F5 talk key goes on working as itself.
+    readonly Func<bool> enabled;
+
+    public PushToTalk(Func<bool> enabled)
     {
+        this.enabled = enabled;
         proc = Hook;
         hook = SetWindowsHookEx(WhKeyboardLl, proc, GetModuleHandle(null), 0);
-        Log.Debug($"push to talk: {(hook == IntPtr.Zero ? "hook failed" : "ready")}");
+        Log.Debug($"push to talk: {(hook == IntPtr.Zero ? "hook failed" : "ready")} {Current.Name}");
     }
 
     IntPtr Hook(int code, IntPtr wParam, IntPtr lParam)
     {
-        if (code >= 0 && Marshal.ReadInt32(lParam) == VkRControl)
+        if (code >= 0)
         {
+            var vk = Marshal.ReadInt32(lParam);
             var msg = wParam.ToInt32();
-            if ((msg == WmKeyDown || msg == WmSysKeyDown) && !down) { down = true; Pressed?.Invoke(); }
-            else if ((msg == WmKeyUp || msg == WmSysKeyUp) && down) { down = false; Released?.Invoke(); }
+            bool isDown = msg is WmKeyDown or WmSysKeyDown, isUp = msg is WmKeyUp or WmSysKeyUp;
+            if (Capture is { } capture)
+            {
+                if (isDown) { Capture = null; capture(vk); }
+                return 1;
+            }
+            var key = Current;
+            if (!enabled()) { down = false; return CallNextHookEx(hook, code, wParam, lParam); }
+            if (vk == key.Vk)
+            {
+                if (isDown && !down) { down = true; combo = false; Pressed?.Invoke(); }
+                else if (isUp && down) { down = false; if (!combo) Released?.Invoke(); }
+                if (!key.Modifier) return 1;
+            }
+            else if (isDown && down && key.Modifier && !combo) { combo = true; Interrupted?.Invoke(); }
         }
         return CallNextHookEx(hook, code, wParam, lParam);
     }

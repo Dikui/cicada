@@ -165,9 +165,11 @@ sealed class Controller
         Store.Audio = new MediaFoundationAudio();
         Store.FinishLeftovers();
         hotkey = new Hotkey(() => Dispatch.BeginInvoke(() => _ = ToggleListening()));
-        talk = new PushToTalk();
+        PushToTalk.Current = TalkKey.Named(Settings.TalkKey);
+        talk = new PushToTalk(() => Settings.Speak);
         talk.Pressed += () => Dispatch.BeginInvoke(PressBegan);
         talk.Released += () => Dispatch.BeginInvoke(PressEnded);
+        talk.Interrupted += () => Dispatch.BeginInvoke(PressInterrupted);
         Log.Debug($"audio: speakers {Endpoints.Default(Endpoints.Flow.Render)?.Name ?? "none"}, mic {Endpoints.Microphone()?.Name ?? "none"}, cable {(Endpoints.Cable() is null ? "absent" : "present")}");
         DebugServer.Start(this);
         WatchNetwork();
@@ -782,6 +784,34 @@ sealed class Controller
         foreach (var r in roomSources) r.Muted = true;
     }
 
+    /// Another key went down while a modifier talk key was held (Ctrl C): a shortcut, not talking.
+    void PressInterrupted()
+    {
+        foreach (var r in roomSources) r.Muted = false;
+        if (Speak.State != SpeakEngine.Phase.Recording) return;
+        mic?.Stop();
+        mic = null;
+        Speak.Cancel();
+        Log.Debug("talk: interrupted by another key");
+    }
+
+    /// 更改 the talk key: the next key pressed anywhere comes to `chosen` (on the UI thread).
+    public void ChooseTalkKey(Action<int> chosen)
+    {
+        if (talk is null) return;
+        talk.Capture = vk => Dispatch.BeginInvoke(() => chosen(vk));
+    }
+
+    public void StopChoosingTalkKey() { if (talk is not null) talk.Capture = null; }
+
+    public void SetTalkKey(TalkKey.Key key)
+    {
+        PushToTalk.Current = key;
+        Settings.TalkKey = key.Name; Settings.Save();
+        Log.Debug($"talk: key {key.Name}");
+        Changed();
+    }
+
     void PressEnded()
     {
         foreach (var r in roomSources) r.Muted = false;
@@ -795,8 +825,40 @@ sealed class Controller
         _ = Speak.Speak(Wav.Bytes(pcm), new DeviceSpeaker(Endpoints.Cable));
     }
 
-    /// 试听: a voice speaks its sample line on the speakers (not into the meeting).
-    public Task Preview(string language) => Speak.Voice(VoiceCatalog.Sample(language), language, new DeviceSpeaker(() => Endpoints.Default(Endpoints.Flow.Render)));
+    public enum PreviewResult { Played, Stopped, NoSpeaker, NoVoice, FellBack, Failed }
+    DeviceSpeaker? previewing;
+    public bool Previewing => previewing is not null;
+    public void StopPreview() => previewing?.Stop();
+
+    /// 试听: a voice speaks its sample line on the speakers (not into the meeting). It used to fail
+    /// without a word (#22); now the result says why, for the line under the voice.
+    public async Task<PreviewResult> Preview(string language)
+    {
+        previewing?.Stop();
+        var speaker = new DeviceSpeaker(() => Endpoints.Default(Endpoints.Flow.Render));
+        PreviewResult result;
+        if (!speaker.Ready) result = PreviewResult.NoSpeaker;
+        else
+        {
+            previewing = speaker;
+            Changed();
+            try
+            {
+                var chosen = VoiceCatalog.Chosen(Settings, language, Ling.Config, Ling.Speaks, WindowsVoice.Has(language));
+                var voiced = await Speak.Voice(VoiceCatalog.Sample(language), language, speaker);
+                result = speaker.Stopped ? PreviewResult.Stopped
+                    : !voiced ? (WindowsVoice.Has(language) ? PreviewResult.Failed : PreviewResult.NoVoice)
+                    : speaker.Failed ? PreviewResult.NoSpeaker
+                    : chosen != VoiceCatalog.SystemId && Speak.LastVoice == "system" ? PreviewResult.FellBack
+                    : PreviewResult.Played;
+            }
+            catch (Exception e) { Log.Debug($"preview: failed {e.GetType().Name}"); result = PreviewResult.Failed; }
+            finally { if (previewing == speaker) previewing = null; }
+        }
+        Log.Debug($"preview: {language} {result}");
+        Changed();
+        return result;
+    }
 
     // MARK: Windows
 
@@ -900,6 +962,8 @@ sealed class Controller
     }
 
     public void SettingsPage(string id) => settingsWindow?.Show(id);
+    /// The open settings window, for the debug pipe's preview and talkkey.
+    public SettingsWindow? OpenSettings => settingsWindow;
     /// Debug: 改这句… on a record's line; 词表 › 粘贴导入 with `text` pasted in.
     public void DebugEditLine(string id, string line) { ShowRecords(id); mainWindow?.DebugEdit(id, line); }
     public void DebugPaste(string text) { ShowSettings(); SettingsPage("words"); settingsWindow?.DebugImport(text); }
@@ -1337,7 +1401,16 @@ static class DebugServer
                     var p = arg.Split('|');
                     return new JsonObject { ["ok"] = app.Store.Audio?.Rewrap(p[0], p[1], p.Length > 2 ? double.Parse(p[2], System.Globalization.CultureInfo.InvariantCulture) : null) ?? false };
                 }
-            case "preview": _ = app.Preview(arg.Length > 0 ? arg : app.Speak.Target); break;
+            // preview: 试听 in the open settings (its result line shows there), else on its own.
+            case "preview":
+                if (arg.Length == 0 && app.OpenSettings is { } sw) _ = sw.RunPreview();
+                else _ = app.Preview(arg.Length > 0 ? arg : app.Speak.Target);
+                break;
+            // talkkey <name>: set it; talkkey choose: settings' 更改 (the next key pressed).
+            case "talkkey":
+                if (arg == "choose") app.OpenSettings?.StartChoosingKey();
+                else if (TalkKey.All.FirstOrDefault(k => k.Name == arg) is { } tk) app.SetTalkKey(tk);
+                return new JsonObject { ["talkKey"] = PushToTalk.Current.Name };
             case "calls":
                 app.FakeCalls = arg switch { "real" => null, "" or "none" => [], _ => arg.Split(',').Select(p => p.Split('=', 2)).ToDictionary(p => p[0], p => p[^1]) };
                 break;

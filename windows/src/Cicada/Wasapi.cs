@@ -262,30 +262,41 @@ sealed class DeviceSpeaker : ISpeechSink
     readonly Func<Endpoints.Device?> device;
     readonly Queue<byte[]> queue = new();
     Thread? thread;
-    volatile bool ending;
+    volatile bool ending, stopped;
     TaskCompletionSource? done;
     int rate;
     public string? DeviceName { get; private set; }
+    /// The device was there but wouldn't play (or vanished): nothing, or not all, was heard.
+    public bool Failed { get; private set; }
+    public bool Stopped => stopped;
 
     public DeviceSpeaker(Func<Endpoints.Device?> device) { this.device = device; }
 
     public bool Ready => device() is not null;
 
+    /// 试听's 停止: what is queued is dropped and End returns; later chunks are ignored.
+    public void Stop()
+    {
+        stopped = true; ending = true;
+        lock (queue) queue.Clear();
+    }
+
     public void Begin(int rate)
     {
         this.rate = rate;
-        ending = false;
+        ending = stopped;
         lock (queue) queue.Clear();
         done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (stopped) { done.TrySetResult(); return; }
         var d = device();
         DeviceName = d?.Name;
-        if (d is null) { Log.Debug("speaker: no device"); done.TrySetResult(); return; }
+        if (d is null) { Log.Debug("speaker: no device"); Failed = true; done.TrySetResult(); return; }
         thread = new Thread(() => Run(d.Id)) { IsBackground = true, Name = "DeviceSpeaker" };
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
     }
 
-    public void Write(byte[] pcm) { lock (queue) queue.Enqueue(pcm); }
+    public void Write(byte[] pcm) { if (!stopped) lock (queue) queue.Enqueue(pcm); }
 
     public Task End() { ending = true; return done?.Task ?? Task.CompletedTask; }
 
@@ -306,7 +317,7 @@ sealed class DeviceSpeaker : ISpeechSink
             byte[] pending = [];
             int offset = 0;
             bool started = false;
-            while (true)
+            while (!stopped)
             {
                 client.GetCurrentPadding(out var padding);
                 var room = (int)(size - padding);
@@ -333,7 +344,7 @@ sealed class DeviceSpeaker : ISpeechSink
             }
             client.Stop();
         }
-        catch (Exception e) { Log.Debug($"speaker: failed 0x{e.HResult:X8}"); }
+        catch (Exception e) { Log.Debug($"speaker: failed 0x{e.HResult:X8}"); Failed = true; }
         finally
         {
             if (client is not null) Marshal.ReleaseComObject(client);

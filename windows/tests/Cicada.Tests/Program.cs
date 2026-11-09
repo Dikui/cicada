@@ -2694,6 +2694,12 @@ static class Tests
         var settings = new AppSettings { SpeakVoices = { ["en"] = "ming:US_Emma" } };
         Equal("cloud:Kore", VoiceCatalog.Chosen(settings, "en", zen, true), "a Ming voice isn't sent to ZenMux");
         Equal("ming:US_Emma", VoiceCatalog.Chosen(settings, "en", new AppSettings().AIConfig(), true), "and is used again on Ling");
+        // #22: Windows' voice saved for a language this PC has no voice for.
+        var system = new AppSettings { SpeakVoices = { ["en"] = "system" } };
+        var ling = new AppSettings().AIConfig();
+        Equal("system", VoiceCatalog.Chosen(system, "en", ling, true, windowsHasIt: true), "kept where Windows has it");
+        Equal("ming:US_Emma", VoiceCatalog.Chosen(system, "en", ling, true, windowsHasIt: false), "the service's voice where it doesn't");
+        Equal("ming:US_Emma", VoiceCatalog.Chosen(system, "en", ling, false, windowsHasIt: false), "even before the service is checked");
     }
 
     public static async Task HearingGoesToTheChosenHearModel()
@@ -3453,5 +3459,27 @@ static class Tests
         Check(await client.Revoke(shared!.Record, s.Id), "revoked");
         Equal(null, client.Store.Read(s.Id), "forgotten after revoke");
         Equal(2, server.Seen.Count(x => x == "POST /api/v1/devices"), "the device file is reused");
+    }
+
+    // MARK: the talk key (#22: keyboards without right Ctrl)
+
+    public static void TalkKeyChoices()
+    {
+        Equal("rcontrol", new AppSettings().TalkKey, "right Ctrl by default");
+        Equal(0xA3, TalkKey.Named(null).Vk, "no name is right Ctrl");
+        Equal(0xA3, TalkKey.Named("nonsense").Vk, "an unknown name is right Ctrl");
+        Equal("f13", TalkKey.Choose(0x7C).Key?.Name, "F13 can be one");
+        Equal("capslock", TalkKey.Choose(0x14).Key?.Name, "Caps Lock can be one");
+        Equal("lcontrol", TalkKey.Choose(0xA2).Key?.Name, "left Ctrl can be one");
+        Check(TalkKey.Choose(0x41).Key is null && TalkKey.Choose(0x41).Refused is not null, "a letter is refused");
+        Check(TalkKey.Choose(0x20).Key is null, "space is refused");
+        Check(TalkKey.Choose(0xA5).Key is null, "right Alt is refused (AltGr, window menus)");
+        Check(TalkKey.Choose(0x5B).Key is null, "the Windows key is refused");
+        Check(TalkKey.All.Where(k => k.Modifier).All(k => k.Name.EndsWith("control") || k.Name.EndsWith("shift")), "only Ctrl and Shift pass through to other apps");
+        Equal(TalkKey.All.Count, TalkKey.All.Select(k => k.Vk).Distinct().Count(), "one key per code");
+        foreach (var k in TalkKey.All) Equal(k, TalkKey.Named(k.Name), $"{k.Name} round-trips");
+        var s = Json.Read<AppSettings>(Json.Write(new AppSettings { TalkKey = "f13" }))!;
+        Equal("f13", s.TalkKey, "kept in settings");
+        Equal("rcontrol", Json.Read<AppSettings>("{}")!.TalkKey, "settings from before it are right Ctrl");
     }
 }
