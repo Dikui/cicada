@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 
 namespace Cicada;
@@ -133,6 +134,11 @@ public sealed class SpeakEngine
     /// Share of the press the computer may play through before it counts as echo (Linux's 0.5).
     public const double EchoShare = 0.5;
 
+    /// Whether a press is dropped as the meeting's echo: only on the plain mic (SpeakEngine.swift's
+    /// `pressPlain`). Through echo cancellation the meeting's voices are taken out of the mic, and
+    /// what is left is me: dropping those presses lost everything said while the other side talked.
+    public static bool EchoDrop(bool echoCancelled, double playedShare) => !echoCancelled && playedShare > EchoShare;
+
     public void BeginRecording()
     {
         pressedAt = DateTimeOffset.Now;
@@ -147,14 +153,17 @@ public sealed class SpeakEngine
     }
 
     /// One utterance: `wav` is 16 kHz mono. Returns what the room heard, or null if nothing was sent.
-    public async Task<string?> Speak(byte[] wav, ISpeechSink sink)
+    /// `echoCancelled`: the press was heard through Windows' echo cancellation (`EchoCancel`).
+    public async Task<string?> Speak(byte[] wav, ISpeechSink sink, bool echoCancelled = false)
     {
         await one.WaitAsync();
         try
         {
             var released = DateTime.UtcNow;
             // A press nobody spoke in: Ming hears 嗯 in the room's hush and the meeting would hear "Hmm."
-            if (!PressSpeech.Spoken(wav))
+            var measure = PressSpeech.Measure(wav);
+            Log.Debug($"speak: press of {Math.Max(0, wav.Length - 44) / 32000.0:F1} s, {measure.Summary}");
+            if (!measure.Spoken)
             {
                 Log.Debug("speak: nothing said in the press, nothing sent");
                 State = Phase.Idle; pressedAt = null;
@@ -163,10 +172,15 @@ public sealed class SpeakEngine
             }
             // The meeting playing through most of the press: what the mic heard is its echo as much
             // as me, and Ming would send the other side's words back to them (measured on the Mac).
-            if (Echo is { } echo && echo.Fraction(pressedMono ?? echo.Now - wav.Length / 32000.0, echo.Now) > EchoShare)
+            if (Echo is { } echo)
             {
-                Log.Debug("speak: the computer was playing through the press (echo), nothing sent");
-                return Fail(Strings.L("对方在说话时说的，没有说出去"));
+                var share = echo.Fraction(pressedMono ?? echo.Now - wav.Length / 32000.0, echo.Now);
+                if (EchoDrop(echoCancelled, share))
+                {
+                    Log.Debug($"speak: the computer played through {share * 100:F0}% of the press on the plain mic (echo), nothing sent");
+                    return Fail(Strings.L("对方在说话时说的，没有说出去"));
+                }
+                if (share > EchoShare) Log.Debug($"speak: the computer played through {share * 100:F0}% of the press, heard with echo cancellation: sending");
             }
             var to = Target;
             State = Phase.Translating; Said = Heard = Problem = null;
@@ -301,12 +315,24 @@ public static class PressSpeech
     const int Frame = 480;
     const double Needed = 0.3;
 
+    /// What the check saw (PressSpeech.Measure on the Mac): seconds over the line, the press's quiet
+    /// and the line (RMS, 0–1). Logged per press: echo left after cancellation raises the quiet,
+    /// and a line held at its −36 dBFS cap is how a soft voice over the meeting gets dropped.
+    public readonly record struct Result(double Voiced, double Floor, double Line)
+    {
+        public bool Spoken => Voiced >= Needed;
+        public string Summary => $"voiced {Voiced.ToString("F2", CultureInfo.InvariantCulture)} s, quiet {Db(Floor)} dBFS, line {Db(Line)} dBFS";
+        static string Db(double v) => v > 0 ? (20 * Math.Log10(v)).ToString("F0", CultureInfo.InvariantCulture) : "-inf";
+    }
+
     /// `wav`: 16 kHz mono 16-bit, with or without its 44-byte header.
-    public static bool Spoken(byte[] wav)
+    public static bool Spoken(byte[] wav) => Measure(wav).Spoken;
+
+    public static Result Measure(byte[] wav)
     {
         var start = wav.Length >= 44 && wav[0] == 'R' && wav[1] == 'I' ? 44 : 0;
         var n = (wav.Length - start) / 2;
-        if (n < Frame) return false;
+        if (n < Frame) return new(0, 0, 0);
         var levels = new List<double>();
         for (var i = 0; i + Frame <= n; i += Frame)
         {
@@ -316,7 +342,7 @@ public static class PressSpeech
         }
         var floor = levels.Order().ElementAt(levels.Count / 10);
         var line = Math.Min(0.016, Math.Max(0.0063, floor * 3));
-        return levels.Count(l => l >= line) * Frame / 16000.0 >= Needed;
+        return new(levels.Count(l => l >= line) * Frame / 16000.0, floor, line);
     }
 
     static readonly HashSet<string> Fillers = ["嗯", "啊", "呃", "哦", "唔", "额", "噢", "哎", "um", "uh", "hmm", "hm", "mm", "mhm", "ah", "oh", "er", "えー", "あの", "음", "어"];
@@ -356,4 +382,23 @@ public sealed class LoudnessLog(Func<double>? clock = null)
             return span.Count == 0 ? 0 : span.Count(b => b.loud) / (double)span.Count;
         }
     }
+}
+
+/// Whether Windows' echo cancellation works on the talk key's mic. A capture stream opened in the
+/// communications category gets the endpoint's AEC when its driver (or Windows 11's Voice Clarity)
+/// has one, and from build 22000 the stream lists its effects. Only an AEC listed as on counts: not
+/// knowing (Windows 10, a driver that lists nothing) is the plain mic, because sending the meeting's
+/// own words back to it is the worse mistake.
+public static class EchoCancel
+{
+    /// AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION (ksmedia.h).
+    public static readonly Guid Effect = new("6f64adbe-8211-11e2-8c70-2c27d7f001fa");
+
+    public readonly record struct AudioEffect(Guid Id, bool CanSetState, bool On);
+
+    /// `effects`: the stream's list, null when Windows has none to give.
+    public static bool InEffect(IReadOnlyList<AudioEffect>? effects) => effects?.Any(e => e.Id == Effect && e.On) ?? false;
+
+    /// Listed but off, and the app may turn it on: worth asking for before the press starts.
+    public static bool CanTurnOn(IReadOnlyList<AudioEffect>? effects) => effects?.Any(e => e.Id == Effect && !e.On && e.CanSetState) ?? false;
 }
