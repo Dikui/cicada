@@ -25,6 +25,14 @@
       {
         "kind": "fixed",
         "platforms": [
+          "mac"
+        ],
+        "title": "麦克风列表里不再出现扬声器和“VPAUAggregateAudioDevice”。",
+        "text": "以前开着同声传译的回声消除时，“设置 › 同声传译”的麦克风列表里会多出“MacBook Pro 扬声器”和一个叫 VPAUAggregateAudioDevice 的设备，选了它们什么也听不到。现在只列真正的麦克风，“打开麦克风”旁的新菜单也一样。"
+      },
+      {
+        "kind": "fixed",
+        "platforms": [
           "windows"
         ],
         "title": "“试听”没声音时会直接写明原因，缺系统语音会自动换用 AI 声音。",
