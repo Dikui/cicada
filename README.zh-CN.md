@@ -25,7 +25,7 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a></p>
 
-开 Zoom、Teams、飞书、腾讯会议，或者听 X Spaces、YouTube 直播，知了都能实时给双语字幕、边听边写结构化纪要。轮到你发言时，按住说话键（Mac 右 `⌥`，Windows 右 `Ctrl`）开口，对方直接在会里听到翻译好的语音。知了直接读系统声音，不往会里塞机器人，对方完全无感。在 Apple 芯片的 Mac 上全部本机识别，声音不出电脑。
+开 Zoom、Teams、飞书、腾讯会议，或者听 X Spaces、YouTube 直播，知了都能实时给双语字幕、边听边写结构化纪要。轮到你发言时，按住说话键（Mac 右 `⌥`，Windows 右 `Ctrl`，没有右 Ctrl 可在设置里换）开口，对方直接在会里听到翻译好的语音。知了直接读系统声音，不往会里塞机器人，对方完全无感。在 Apple 芯片的 Mac 上全部本机识别，声音不出电脑。
 
 **能在哪里用**：电脑能放出声音的都行。腾讯会议、飞书、钉钉、企业微信、Zoom、Teams、Google Meet、Webex、Discord、Telegram 语音，X Spaces、YouTube、Twitch、B 站直播和播客，网页版也行。手机上会议和通话 app 的声音系统不让录，开外放用“面对面”就行。
 
