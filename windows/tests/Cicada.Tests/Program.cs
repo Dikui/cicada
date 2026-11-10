@@ -1587,6 +1587,22 @@ static class Tests
         Equal(64, VirtualCable.PackageSha256.Length, "a full SHA-256 is pinned");
     }
 
+    public static void GivesTheSpeakerBackAfterTheCableInstall()
+    {
+        static bool cable(string id) => id.StartsWith("cable");
+        var before = new Dictionary<string, string> { ["0/0"] = "realtek", ["0/1"] = "realtek", ["0/2"] = "headset", ["1/0"] = "mic", ["1/2"] = "cable-out" };
+        var after = new Dictionary<string, string> { ["0/0"] = "cable-in", ["0/1"] = "cable-in", ["0/2"] = "headset", ["1/0"] = "cable-out", ["1/1"] = "cable-out", ["1/2"] = "cable-out" };
+        var back = CableDefaults.Restore(before, after, cable);
+        Equal("0/0=realtek 0/1=realtek 1/0=mic", string.Join(" ", back.Select(r => $"{r.Key}={r.Id}")),
+            "only the defaults the cable took from a real device; one already on the cable, or unknown before, stays");
+        Equal(0, CableDefaults.Restore(before, before, cable).Count, "nothing changed, nothing to do");
+        Equal("realtek", CableDefaults.Speaker([("cable-in", true), ("realtek", false)]), "the first real speaker");
+        Equal(null, CableDefaults.Speaker([("cable-in", true)]), "no real speaker");
+        Check(CableDefaults.ShouldNotify(true, false), "told once");
+        Check(!CableDefaults.ShouldNotify(true, true), "not again while it stays on the cable");
+        Check(!CableDefaults.ShouldNotify(false, false), "a real speaker: nothing to say");
+    }
+
     static SpeakEngine Speaker(LingClient ling, NoVoice voice, AppSettings? settings = null) =>
         new(ling, new Translator(ling, new Fake(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))), new SessionStore(), settings ?? new AppSettings(), () => "en", () => null, voice);
 

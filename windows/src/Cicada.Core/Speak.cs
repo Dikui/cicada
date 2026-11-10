@@ -272,6 +272,26 @@ public static class VirtualCable
     public static bool Verify(byte[] package) => Convert.ToHexString(SHA256.HashData(package)).Equals(PackageSha256, StringComparison.OrdinalIgnoreCase);
 }
 
+/// Windows can make a freshly installed VB-Cable the default speaker (and mic): then everything the
+/// computer plays goes into the cable and the user hears nothing. A user took that for Cicada
+/// breaking their sound and nearly uninstalled it. Keys are "<flow>/<role>" (render 0, capture 1;
+/// console 0, multimedia 1, communications 2), values the endpoint ids.
+public static class CableDefaults
+{
+    /// The defaults to set back after the install: each one the cable took from a real device.
+    public static List<(string Key, string Id)> Restore(IReadOnlyDictionary<string, string> before, IReadOnlyDictionary<string, string> after, Func<string, bool> isCable) =>
+        after.Where(a => isCable(a.Value) && before.TryGetValue(a.Key, out var b) && !isCable(b))
+            .Select(a => (a.Key, before[a.Key])).OrderBy(r => r.Key, StringComparer.Ordinal).ToList();
+
+    /// A speaker to go back to when nothing was remembered (installed before this, or outside
+    /// Cicada): the first that isn't the cable.
+    public static string? Speaker(IEnumerable<(string Id, bool Cable)> speakers) => speakers.FirstOrDefault(s => !s.Cable).Id;
+
+    /// The startup notification, once while the cable holds the speaker: someone who routes sound
+    /// into it on purpose hears about it once; it comes back only after the speaker was real again.
+    public static bool ShouldNotify(bool speakerIsCable, bool notified) => speakerIsCable && !notified;
+}
+
 /// Whether anyone spoke during a press of the talk key (PressSpeech in SpeakEngine.swift, same
 /// numbers): 0.3 s of 30 ms frames over three times the press's own quiet (its quietest tenth),
 /// between -44 and -36 dBFS. A silent press came back from Ming as "嗯。" and went out as "Hmm.";

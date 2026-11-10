@@ -192,9 +192,29 @@ sealed class Controller
         else
         {
             if (Ling.HasKey) _ = Ling.Check();
+            NotifyCableSpeaker();
             if (Arrived == "--updated") Toast(LF("知了已更新到 %@", Version), L("会议记录、设置和 Ling key 都在。"));
             else if (Arrived is not null) FromInstaller();
         }
+    }
+
+    /// VB-Cable holds the speaker (installed before Cicada gave it back, or outside Cicada): the user
+    /// hears nothing and may blame Cicada. Said once (CableDefaults.ShouldNotify); a click gives a
+    /// real speaker back.
+    public void NotifyCableSpeaker()
+    {
+        var onCable = Endpoints.SpeakerIsCable();
+        if (CableDefaults.ShouldNotify(onCable, Settings.CableSpeakerNotified))
+        {
+            Toast(L("听不到电脑声音了？"), L("Windows 把输出改成了 CABLE Input，点此恢复"), () =>
+            {
+                if (!Endpoints.RestoreSpeaker()) Toast(L("自动恢复失败"), L("请去 Windows 声音设置，把输出设备改回你的耳机或扬声器"), () => Open("ms-settings:sound"));
+            });
+            Log.Debug("cable: speaker notified");
+        }
+        if (Settings.CableSpeakerNotified == onCable) return;
+        Settings.CableSpeakerNotified = onCable;
+        Settings.Save();
     }
 
     /// The installer ran again with this version (or an older one) already here: bring the main window.
@@ -245,7 +265,8 @@ sealed class Controller
             if (e.Button == Forms.MouseButtons.Left) Dispatch.BeginInvoke(() => { if (Listen.Listening && Settings.View == "notes") ToggleNotes(); else ShowFlyout(); });
             else if (e.Button == Forms.MouseButtons.Right) Dispatch.BeginInvoke(ShowMenu);
         };
-        tray.BalloonTipClicked += (_, _) => Dispatch.BeginInvoke(() => { balloonClicked?.Invoke(); balloonClicked = null; });
+        // Cleared before the run: a click may show the next notification, with its own action.
+        tray.BalloonTipClicked += (_, _) => Dispatch.BeginInvoke(() => { var c = balloonClicked; balloonClicked = null; c?.Invoke(); });
         UpdateTray();
     }
 
@@ -1379,6 +1400,21 @@ static class DebugServer
                 break;
             }
             case "speakers": app.Settings.SpeakerVoices = arg == "on"; app.Settings.Save(); app.SettingsChanged(); break;
+            // speaker: the defaults and whether the cable holds the speaker; "cable" hands it the speaker
+            // (what Windows may do on install), "install" does that and then the installer's give-back,
+            // "restore" is 恢复声音, "notify" the startup notification again.
+            case "speaker":
+                if (arg is "cable" or "install")
+                {
+                    var before = Endpoints.Defaults();
+                    var to = Endpoints.Cable()!.Id;
+                    for (var role = 0; role < 3; role++) Endpoints.SetDefault(to, role);
+                    if (arg == "install") _ = CableInstaller.GiveBackDefaults(before); // about 4 s; ask "speaker" after
+                }
+                else if (arg == "restore") Endpoints.RestoreSpeaker();
+                else if (arg == "notify") { app.Settings.CableSpeakerNotified = false; app.NotifyCableSpeaker(); }
+                return new JsonObject { ["onCable"] = Endpoints.SpeakerIsCable(), ["speaker"] = Endpoints.Default(Endpoints.Flow.Render)?.Name, ["notified"] = app.Settings.CableSpeakerNotified,
+                    ["defaults"] = string.Join(" ", Endpoints.Defaults().OrderBy(d => d.Key).Select(d => $"{d.Key}={(Endpoints.CableIds().Contains(d.Value) ? "cable" : "real")}")) };
             case "fakemic": app.SetFakeMic(arg == "off" ? null : arg); break;
             case "record": _ = app.RecordCable(arg); break;
             // 回放: "open <id> [transcript]", "play <seconds>|toggle|speed", "recordaudio on|off".
